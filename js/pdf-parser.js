@@ -20,17 +20,17 @@ async function extrairLinhasEstruturadas(arquivo) {
             .map(item => ({
                 x: item.transform[4],
                 y: item.transform[5],
-                texto: item.str.trim()
+                texto: item.str.trim(),
+                largura: item.width || 0
             }))
             .filter(it => it.texto.length > 0);
 
-        const TOLERANCIA = 3;
+        // Agrupa por Y (linha) — tolerância 3px
+        const TOL_Y = 3;
         const linhasAgrupadas = [];
 
         itens.forEach(item => {
-            let linha = linhasAgrupadas.find(l =>
-                Math.abs(l.y - item.y) < TOLERANCIA
-            );
+            let linha = linhasAgrupadas.find(l => Math.abs(l.y - item.y) < TOL_Y);
             if (linha) {
                 linha.itens.push(item);
             } else {
@@ -38,14 +38,16 @@ async function extrairLinhasEstruturadas(arquivo) {
             }
         });
 
+        // Ordena itens por X em cada linha
         linhasAgrupadas.sort((a, b) => b.y - a.y);
-
         linhasAgrupadas.forEach(l => {
             l.itens.sort((a, b) => a.x - b.x);
             todasLinhas.push({
                 pagina: l.pagina,
                 y: l.y,
                 celulas: l.itens.map(it => it.texto),
+                // ⚠️ NOVO: guarda também a coordenada X de cada célula
+                celulasComX: l.itens.map(it => ({ x: it.x, texto: it.texto })),
                 textoLinha: l.itens.map(it => it.texto).join(' | ')
             });
         });
@@ -53,7 +55,6 @@ async function extrairLinhasEstruturadas(arquivo) {
 
     return todasLinhas;
 }
-
 // ============================================================
 //  DETECÇÃO DE ALUNOS — V7 (definitiva)
 //  Reconhece: "N | SOBRENOME | notas..." ou "N | nome | notas..."
@@ -62,7 +63,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
     const alunos = [];
     let turma = { serie: '', letra: '' };
 
-    // Detecta turma
+    // ---- Detecta turma ----
     for (const linha of linhas) {
         const m = linha.textoLinha.match(/Seriação:\s*(\d+)[ªº°]?\s*Ano.*Turma:\s*([A-Z])/i);
         if (m) {
@@ -71,32 +72,52 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
         }
     }
 
-    // Filtra linhas — remove cabeçalhos e para no primeiro "Total de registros"
+    // ---- Detecta as coordenadas X do cabeçalho T1 T2 T3 ----
+    // Encontra a linha do cabeçalho "T1 T2 T3 T1 T2 T3 ..." (a que tem mais T's)
+    let cabecalhoX = null;
+    for (const linha of linhas) {
+        const tCount = (linha.textoLinha.match(/T[123]/g) || []).length;
+        if (tCount >= 20) {  // deve ter ~27 T's
+            cabecalhoX = linha.celulasComX;
+            break;
+        }
+    }
+
+    if (!cabecalhoX) {
+        console.error('❌ Cabeçalho T1/T2/T3 não encontrado!');
+        return [];
+    }
+
+    // Mapeia: cada célula do cabeçalho tem {x, texto: 'T1'|'T2'|'T3'}
+    // Filtra só os que são T1, T2 ou T3
+    const colunas = cabecalhoX
+        .filter(c => /^T[123]$/.test(c.texto))
+        .map(c => ({ x: c.x, trimestre: parseInt(c.texto[1]) }));
+
+    console.log(`📐 Colunas detectadas: ${colunas.length} colunas (T1/T2/T3)`);
+
+    // Filtra linhas relevantes
     const linhasRelevantes = [];
     for (const linha of linhas) {
         const txt = linha.textoLinha;
-        if (/GOVERNO|SECRETARIA|CRUZEIRO|ANCHIETA|Curso:|RELATÓRIO|Sistema Escola|DATA:|^T[123]/i.test(txt)) continue;
-        if (/^Disciplinas|^Nro\.|^Nome$/i.test(txt)) continue;
-        if (/^ARTE\s*\|/i.test(txt) && /CIENCIAS/i.test(txt)) continue;  // linha de cabeçalho de disciplinas
+        if (/GOVERNO|SECRETARIA|CRUZEIRO|ANCHIETA|Curso:|RELATÓRIO|Sistema Escola|DATA:/i.test(txt)) continue;
         if (/Total de registros abaixo/i.test(txt)) break;
         linhasRelevantes.push(linha);
     }
 
-    // Buffer que acumula partes de nomes quebrados
     let nomeBuffer = [];
 
     for (let i = 0; i < linhasRelevantes.length; i++) {
         const linha = linhasRelevantes[i];
-        const celulas = linha.celulas.map(c => c.trim()).filter(c => c.length > 0);
+        const celulas = linha.celulas;
 
-        if (celulas.length === 0) continue;
-
-        // ---- Detecta linha puramente de nome (sem números) ----
+        // Detecta linha de nome puro
         const textoLimpo = celulas.join(' ').trim();
         const temNumero = celulas.some(c => /^\d{1,2}$/.test(c));
         const ehSóNome = !temNumero &&
                         /^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(textoLimpo) &&
-                        textoLimpo.length >= 8;
+                        textoLimpo.length >= 8 &&
+                        !/ARTE|CIENCIAS|DISCIPLINAS/i.test(textoLimpo);
 
         if (ehSóNome) {
             nomeBuffer.push(textoLimpo);
@@ -104,8 +125,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
             continue;
         }
 
-        // ---- Detecta linha com NÚMERO do aluno ----
-        // Formato: "N | [nome/sobrenome] | notas..."
+        // Detecta número
         let idxNum = -1;
         for (let j = 0; j < Math.min(celulas.length, 2); j++) {
             if (/^\d{1,2}$/.test(celulas[j])) {
@@ -113,85 +133,86 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
                 if (n >= 1 && n <= 99) { idxNum = j; break; }
             }
         }
-        if (idxNum === -1) {
-            nomeBuffer = [];
-            continue;
-        }
+        if (idxNum === -1) { nomeBuffer = []; continue; }
 
         const numero = parseInt(celulas[idxNum]);
-        if (alunos.find(a => a.numero === numero)) {
-            nomeBuffer = [];
-            continue;
-        }
+        if (alunos.find(a => a.numero === numero)) { nomeBuffer = []; continue; }
 
-        // ---- Extrai nome inline (célula após o número) ----
+        // Extrai nome inline
         let nomeInline = '';
-        let idxPrimeiraNota = -1;
-
         for (let j = idxNum + 1; j < celulas.length; j++) {
             const c = celulas[j];
-            if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{2,}$/.test(c) && !nomeInline) {
+            if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{2,}$/.test(c) && !/^\d/.test(c)) {
                 nomeInline = c;
-            }
-            if (/^\d{1,2}[.,]\d$/.test(c)) {
-                idxPrimeiraNota = j;
                 break;
             }
+            if (/^\d{1,2}[.,]\d$/.test(c) || c === '--') break;
         }
 
-        // ---- Monta o nome completo ----
-        // Ordem: [nomeBuffer] + [nomeInline]
+        // Monta nome
         const partes = [...nomeBuffer];
         if (nomeInline) partes.push(nomeInline);
-
-        // Se ainda tem só 1 palavra, olha a próxima linha
         let nome = partes.join(' ').replace(/\s+/g, ' ').trim();
 
-        if (nome.split(' ').length < 2) {
+        if (nome.split(' ').length < 2 && i + 1 < linhasRelevantes.length) {
             const prox = linhasRelevantes[i + 1];
-            if (prox) {
-                const proxCelulas = prox.celulas.map(c => c.trim()).filter(c => c.length > 0);
-                const proxTexto = proxCelulas.join(' ').trim();
-                const proxSemNumero = !proxCelulas.some(c => /^\d{1,2}$/.test(c));
-                if (proxSemNumero && /^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(proxTexto)) {
-                    nome = (nome + ' ' + proxTexto).trim();
+            const proxTxt = prox.celulas.join(' ').trim();
+            if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(proxTxt) &&
+                !prox.celulas.some(c => /^\d{1,2}$/.test(c))) {
+                nome = (nome + ' ' + proxTxt).trim();
+            }
+        }
+
+        if (!nome || nome.length < 5) { nomeBuffer = []; continue; }
+
+        // ============================================================
+        // ✅ MAPEAMENTO CORRETO: para cada nota, encontra a coluna
+        //    pela coordenada X mais próxima
+        // ============================================================
+        const notasPorTrimestre = { 1: {}, 2: {}, 3: {} };  // trimestre → {disciplina: nota}
+        let disciplinaIndex = 0;
+
+        // Pega as células com X (a partir do número)
+        const celulasComX = linha.celulasComX;
+
+        // Itera sobre cada célula de nota e acha a coluna mais próxima
+        for (let j = 0; j < celulasComX.length; j++) {
+            const c = celulasComX[j];
+            if (!/^\d{1,2}[.,]\d$/.test(c.texto)) continue;
+
+            // Acha a coluna T com X mais próximo (tolerância 15px)
+            let colunaMaisProxima = null;
+            let menorDistancia = 15;
+
+            for (const col of colunas) {
+                const dist = Math.abs(col.x - c.x);
+                if (dist < menorDistancia) {
+                    menorDistancia = dist;
+                    colunaMaisProxima = col;
                 }
             }
-        }
 
-        if (!nome || nome.length < 5) {
-            nomeBuffer = [];
-            continue;
-        }
-
-        // ---- Extrai notas ----
-        const inicioNotas = idxPrimeiraNota !== -1 ? idxPrimeiraNota : idxNum + 1;
-        const notas = [];
-        for (let j = inicioNotas; j < celulas.length; j++) {
-            const c = celulas[j];
-            if (/^\d{1,2}[.,]\d$/.test(c)) {
-                const n = parseFloat(c.replace(',', '.'));
-                if (n >= 0 && n <= 10) notas.push(n);
+            if (colunaMaisProxima) {
+                const tri = colunaMaisProxima.trimestre;
+                const idxDisciplina = Math.floor(colunas.indexOf(colunaMaisProxima) / 3);
+                notasPorTrimestre[tri][`disc${idxDisciplina}`] = 
+                    parseFloat(c.texto.replace(',', '.'));
             }
         }
 
-        if (notas.length < 5) {
-            nomeBuffer = [];
-            continue;
-        }
+        // Pega só as notas do trimestre desejado
+        const notasT = Object.values(notasPorTrimestre[trimestre])
+            .filter(n => !isNaN(n));
 
-        const notasT = filtrarNotasTrimestre(notas, trimestre);
+        if (notasT.length < 3) { nomeBuffer = []; continue; }
 
         alunos.push({
             numero,
             nome,
             turma: { ...turma },
-            notas,
             notasTrimestre: notasT,
-            media: notasT.length > 0
-                ? notasT.reduce((a, b) => a + b, 0) / notasT.length
-                : 0,
-            elegivel: notasT.length > 0 && notasT.every(n => n >= CONFIG.notaMinima)
+            media: notasT.reduce((a, b) => a + b, 0) / notasT.length,
+            elegivel: notasT.every(n => n >= CONFIG.notaMinima)
         });
 
         nomeBuffer = [];
