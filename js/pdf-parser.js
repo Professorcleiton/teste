@@ -6,7 +6,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 // ============================================================
 //  EXTRAÇÃO POR COORDENADAS (Y)
-//  Muito mais robusta que agrupar por proximidade
 // ============================================================
 async function extrairLinhasEstruturadas(arquivo) {
     const buffer = await arquivo.arrayBuffer();
@@ -17,7 +16,6 @@ async function extrairLinhasEstruturadas(arquivo) {
         const pagina = await pdf.getPage(i);
         const conteudo = await pagina.getTextContent();
 
-        // Coleta TODOS os itens com coordenadas
         const itens = conteudo.items
             .map(item => ({
                 x: item.transform[4],
@@ -26,7 +24,6 @@ async function extrairLinhasEstruturadas(arquivo) {
             }))
             .filter(it => it.texto.length > 0);
 
-        // Agrupa por Y (tolerância 3px)
         const TOLERANCIA = 3;
         const linhasAgrupadas = [];
 
@@ -41,7 +38,6 @@ async function extrairLinhasEstruturadas(arquivo) {
             }
         });
 
-        // Ordena de cima para baixo
         linhasAgrupadas.sort((a, b) => b.y - a.y);
 
         linhasAgrupadas.forEach(l => {
@@ -59,15 +55,14 @@ async function extrairLinhasEstruturadas(arquivo) {
 }
 
 // ============================================================
-//  EXTRAÇÃO DE ALUNOS — V6
-//  Regra: só considera o PRIMEIRO bloco de relatório
-//         (para no "Total de registros abaixo da Média")
+//  DETECÇÃO DE ALUNOS — V7 (definitiva)
+//  Reconhece: "N | SOBRENOME | notas..." ou "N | nome | notas..."
 // ============================================================
 function extrairAlunosDasLinhas(linhas, trimestre) {
     const alunos = [];
     let turma = { serie: '', letra: '' };
 
-    // Detecta turma (primeira ocorrência)
+    // Detecta turma
     for (const linha of linhas) {
         const m = linha.textoLinha.match(/Seriação:\s*(\d+)[ªº°]?\s*Ano.*Turma:\s*([A-Z])/i);
         if (m) {
@@ -76,103 +71,120 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
         }
     }
 
-    // Filtra linhas até encontrar o marcador de fim do primeiro relatório
+    // Filtra linhas — remove cabeçalhos e para no primeiro "Total de registros"
     const linhasRelevantes = [];
     for (const linha of linhas) {
         const txt = linha.textoLinha;
-        // Pula cabeçalhos
-        if (/GOVERNO|SECRETARIA|CRUZEIRO|ANCHIETA|Curso:|RELATÓRIO|Disciplinas|Nro\.|Sistema Escola|DATA:|^T[123]/i.test(txt)) {
-            continue;
-        }
-        // Para no fim do primeiro relatório
-        if (/Total de registros abaixo/i.test(txt)) {
-            break;
-        }
+        if (/GOVERNO|SECRETARIA|CRUZEIRO|ANCHIETA|Curso:|RELATÓRIO|Sistema Escola|DATA:|^T[123]/i.test(txt)) continue;
+        if (/^Disciplinas|^Nro\.|^Nome$/i.test(txt)) continue;
+        if (/^ARTE\s*\|/i.test(txt) && /CIENCIAS/i.test(txt)) continue;  // linha de cabeçalho de disciplinas
+        if (/Total de registros abaixo/i.test(txt)) break;
         linhasRelevantes.push(linha);
     }
 
-    // ---- Itera linha por linha buscando o número do aluno ----
-    // Estratégia: o número aparece como UMA célula isolada "1", "2", ..., "34"
+    // Buffer que acumula partes de nomes quebrados
+    let nomeBuffer = [];
+
     for (let i = 0; i < linhasRelevantes.length; i++) {
         const linha = linhasRelevantes[i];
-        const celulas = linha.celulas;
+        const celulas = linha.celulas.map(c => c.trim()).filter(c => c.length > 0);
 
-        // Procura célula com número isolado (1-40)
+        if (celulas.length === 0) continue;
+
+        // ---- Detecta linha puramente de nome (sem números) ----
+        const textoLimpo = celulas.join(' ').trim();
+        const temNumero = celulas.some(c => /^\d{1,2}$/.test(c));
+        const ehSóNome = !temNumero &&
+                        /^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(textoLimpo) &&
+                        textoLimpo.length >= 8;
+
+        if (ehSóNome) {
+            nomeBuffer.push(textoLimpo);
+            if (nomeBuffer.length > 3) nomeBuffer.shift();
+            continue;
+        }
+
+        // ---- Detecta linha com NÚMERO do aluno ----
+        // Formato: "N | [nome/sobrenome] | notas..."
         let idxNum = -1;
-        for (let j = 0; j < Math.min(celulas.length, 3); j++) {
-            const c = celulas[j].trim();
-            if (/^\d{1,2}$/.test(c)) {
-                const n = parseInt(c);
+        for (let j = 0; j < Math.min(celulas.length, 2); j++) {
+            if (/^\d{1,2}$/.test(celulas[j])) {
+                const n = parseInt(celulas[j]);
                 if (n >= 1 && n <= 99) { idxNum = j; break; }
             }
         }
-        if (idxNum === -1) continue;
+        if (idxNum === -1) {
+            nomeBuffer = [];
+            continue;
+        }
 
         const numero = parseInt(celulas[idxNum]);
+        if (alunos.find(a => a.numero === numero)) {
+            nomeBuffer = [];
+            continue;
+        }
 
-        // Evita duplicata
-        if (alunos.find(a => a.numero === numero)) continue;
+        // ---- Extrai nome inline (célula após o número) ----
+        let nomeInline = '';
+        let idxPrimeiraNota = -1;
 
-        // ---- Extrai o nome ----
-        let nome = '';
-
-        // Caso 1: nome na MESMA linha (depois do número)
         for (let j = idxNum + 1; j < celulas.length; j++) {
-            const c = celulas[j].trim();
-            if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(c)) {
-                nome = c;
+            const c = celulas[j];
+            if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{2,}$/.test(c) && !nomeInline) {
+                nomeInline = c;
+            }
+            if (/^\d{1,2}[.,]\d$/.test(c)) {
+                idxPrimeiraNota = j;
                 break;
             }
-            if (/^\d{1,2}[.,]\d$/.test(c) || c === '--') break;
         }
 
-        // Caso 2: nome vem de 1-3 linhas ACIMA
-        if (!nome) {
-            const partes = [];
-            for (let k = 1; k <= 3; k++) {
-                const ant = linhasRelevantes[i - k];
-                if (!ant) break;
-                const txtAnt = ant.celulas.join(' ').trim();
-                // Linha é só nome (sem números e sem notas)
-                if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(txtAnt)) {
-                    partes.unshift(txtAnt);
-                } else {
-                    break;
-                }
-            }
-            nome = partes.join(' ');
-        }
+        // ---- Monta o nome completo ----
+        // Ordem: [nomeBuffer] + [nomeInline]
+        const partes = [...nomeBuffer];
+        if (nomeInline) partes.push(nomeInline);
 
-        // Caso 3: junta com a próxima linha (sobrenome)
-        if (nome && !nome.includes(' ')) {
+        // Se ainda tem só 1 palavra, olha a próxima linha
+        let nome = partes.join(' ').replace(/\s+/g, ' ').trim();
+
+        if (nome.split(' ').length < 2) {
             const prox = linhasRelevantes[i + 1];
             if (prox) {
-                const txtProx = prox.celulas.join(' ').trim();
-                if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(txtProx)) {
-                    nome = nome + ' ' + txtProx;
+                const proxCelulas = prox.celulas.map(c => c.trim()).filter(c => c.length > 0);
+                const proxTexto = proxCelulas.join(' ').trim();
+                const proxSemNumero = !proxCelulas.some(c => /^\d{1,2}$/.test(c));
+                if (proxSemNumero && /^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(proxTexto)) {
+                    nome = (nome + ' ' + proxTexto).trim();
                 }
             }
         }
 
-        // ---- Extrai todas as notas ----
+        if (!nome || nome.length < 5) {
+            nomeBuffer = [];
+            continue;
+        }
+
+        // ---- Extrai notas ----
+        const inicioNotas = idxPrimeiraNota !== -1 ? idxPrimeiraNota : idxNum + 1;
         const notas = [];
-        for (let j = idxNum + 1; j < celulas.length; j++) {
-            const c = celulas[j].trim();
+        for (let j = inicioNotas; j < celulas.length; j++) {
+            const c = celulas[j];
             if (/^\d{1,2}[.,]\d$/.test(c)) {
                 const n = parseFloat(c.replace(',', '.'));
                 if (n >= 0 && n <= 10) notas.push(n);
             }
         }
 
-        // Requer mínimo de notas
-        if (notas.length < 5) continue;
-        if (!nome || nome.length < 5) continue;
+        if (notas.length < 5) {
+            nomeBuffer = [];
+            continue;
+        }
 
         const notasT = filtrarNotasTrimestre(notas, trimestre);
 
         alunos.push({
             numero,
-            nome: nome.replace(/\s+/g, ' ').trim(),
+            nome,
             turma: { ...turma },
             notas,
             notasTrimestre: notasT,
@@ -181,25 +193,45 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
                 : 0,
             elegivel: notasT.length > 0 && notasT.every(n => n >= CONFIG.notaMinima)
         });
+
+        nomeBuffer = [];
     }
 
     return alunos.sort((a, b) => a.numero - b.numero);
 }
 
 // ============================================================
-//  Helpers
+//  FILTRO DE TRIMESTRE — detecção automática de padrão
 // ============================================================
 function filtrarNotasTrimestre(notas, trimestre) {
-    const offset = trimestre - 1;
+    // O parser remove os "--" e mantém apenas notas válidas.
+    // Se o PDF tem N disciplinas × 2 trimestres, o padrão é:
+    //   [D1-T1, D1-T2, D2-T1, D2-T2, D3-T1, D3-T2, ...]
+    // Se tem N × 3 trimestres:
+    //   [D1-T1, D1-T2, D1-T3, D2-T1, ...]
+    //
+    // Total de notas detectadas:
+    //   16 → 8 disciplinas × 2 trimestres
+    //   24 → 8 disciplinas × 3 trimestres
+    //   27 → 9 disciplinas × 3 trimestres
+    //   18 → 9 disciplinas × 2 trimestres
+    const total = notas.length;
+    let porDisciplina = 2;  // padrão para seu PDF
+
+    if (total === 16 || total === 18 || total === 20) porDisciplina = 2;
+    else if (total === 24 || total === 27) porDisciplina = 3;
+    else if (total % 3 === 0) porDisciplina = 3;
+
+    const offset = (trimestre - 1) % porDisciplina;
     const filtradas = [];
-    for (let i = offset; i < notas.length; i += 3) {
+    for (let i = offset; i < notas.length; i += porDisciplina) {
         filtradas.push(notas[i]);
     }
     return filtradas;
 }
 
 // ============================================================
-//  Funções principais (chamadas pelo app.js)
+//  Funções principais
 // ============================================================
 async function extrairTextoPDF(arquivo) {
     const linhas = await extrairLinhasEstruturadas(arquivo);
