@@ -155,3 +155,39 @@ async function converterTextoEmAlunos(arquivo, trimestre) {
     const linhas = await extrairLinhasEstruturadas(arquivo);
     return extrairAlunosDasLinhas(linhas, trimestre);
 }
+
+// ============================================================
+//  Extrai APENAS as notas do trimestre selecionado
+//  (o PDF lista T1, T2, T3 de cada disciplina — vamos pegar só um)
+// ============================================================
+function filtrarNotasDoTrimestre(notas, trimestre) {
+    // notas vem na ordem: DISC1-T1, DISC1-T2, DISC1-T3, DISC2-T1, ...
+    // Se o trimestre é 1, pega índices 0, 3, 6, 9, ...
+    // Se é 2, pega 1, 4, 7, 10, ...
+    // Se é 3, pega 2, 5, 8, 11, ...
+    const offset = trimestre - 1;
+    const filtradas = [];
+    for (let i = offset; i < notas.length; i += 3) {
+        filtradas.push(notas[i]);
+    }
+    return filtradas;
+}
+
+// Sobrescreve a função de conversão para usar filtro
+async function converterTextoEmAlunos(arquivo, trimestre) {
+    const linhas = await extrairLinhasEstruturadas(arquivo);
+    const alunos = extrairAlunosDasLinhas(linhas, trimestre);
+
+    // Filtra notas do trimestre selecionado
+    alunos.forEach(a => {
+        const notasTrimestre = filtrarNotasDoTrimestre(a.notas, trimestre);
+        a.notasTrimestre = notasTrimestre;
+        a.media = notasTrimestre.length > 0
+            ? notasTrimestre.reduce((x, y) => x + y, 0) / notasTrimestre.length
+            : 0;
+        a.elegivel = notasTrimestre.length > 0 &&
+            notasTrimestre.every(n => n >= CONFIG.notaMinima);
+    });
+
+    return alunos;
+}
