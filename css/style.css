@@ -1,0 +1,337 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(135deg, #1B3A5C, #2a5298);
+    min-height: 100vh;
+    padding: 20px;
+    color: #333;
+}
+
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+header {
+    text-align: center;
+    color: #fff;
+    margin-bottom: 30px;
+}
+
+.header-logo {
+    height: 80px;
+    margin-bottom: 10px;
+}
+
+header h1 {
+    font-size: 28px;
+    margin-bottom: 6px;
+}
+
+header p {
+    opacity: 0.9;
+    font-size: 14px;
+}
+
+.card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+
+.card h2 {
+    font-size: 18px;
+    color: #1B3A5C;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #6B8E23;
+    padding-bottom: 8px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1B3A5C;
+    margin-bottom: 5px;
+}
+
+select {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e0e6ef;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.file-drop {
+    display: block;
+    border: 2px dashed #2a5298;
+    border-radius: 8px;
+    padding: 30px;
+    text-align: center;
+    cursor: pointer;
+    background: #f8fafd;
+    transition: 0.2s;
+    margin: 15px 0;
+}
+
+.file-drop:hover {
+    background: #e8f0fe;
+    border-color: #1B3A5C;
+}
+
+.file-drop span {
+    font-size: 16px;
+    color: #2a5298;
+    font-weight: 600;
+}
+
+.file-item {
+    padding: 8px 12px;
+    background: #e8f0fe;
+    border-radius: 4px;
+    margin-bottom: 5px;
+    font-size: 13px;
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: 0.2s;
+    margin-top: 10px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #1B3A5C, #2a5298);
+    color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(42,82,152,0.4);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: #e8f0fe;
+    color: #1B3A5C;
+}
+
+#status {
+    margin-top: 15px;
+    font-size: 14px;
+}
+
+.processando { color: #2a5298; }
+.ok { color: #27ae60; font-weight: 600; }
+.erro { color: #c0392b; font-weight: 600; }
+
+.stats {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.stat {
+    flex: 1;
+    background: #f8fafd;
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    border-left: 4px solid #2a5298;
+}
+
+.stat.destaque {
+    border-left-color: #27ae60;
+    background: #e8f9ef;
+}
+
+.stat .valor {
+    display: block;
+    font-size: 28px;
+    font-weight: bold;
+    color: #1B3A5C;
+}
+
+.stat .label {
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+}
+
+.table-wrapper {
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid #e0e6ef;
+    border-radius: 8px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+th {
+    background: #f0f4f9;
+    padding: 12px;
+    text-align: left;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    color: #1B3A5C;
+}
+
+td {
+    padding: 10px 12px;
+    border-top: 1px solid #eef2f7;
+}
+
+.linha-elegivel { background: #f4fdf8; }
+.linha-nao-elegivel { background: #fdf5f4; opacity: 0.7; }
+
+.badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-ok { background: #d4f4e0; color: #1a7a3e; }
+.badge-no { background: #fdd; color: #a02020; }
+
+.actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.actions button { flex: 1; }
+
+/* ============================================================
+   TEMPLATE DO CERTIFICADO
+   ============================================================ */
+#certificate-template {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+}
+
+.certificate {
+    width: 842px;
+    height: 595px;
+    padding: 40px 60px;
+    background: #fff;
+    border: 10px double #1B3A5C;
+    outline: 2px solid #6B8E23;
+    outline-offset: -18px;
+    text-align: center;
+    font-family: 'Times New Roman', Georgia, serif;
+    position: relative;
+}
+
+.cert-logo {
+    height: 60px;
+    margin-bottom: 5px;
+}
+
+.cert-title {
+    font-size: 30px;
+    color: #1B3A5C;
+    letter-spacing: 2px;
+    margin: 10px 0 20px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #6B8E23;
+    display: inline-block;
+}
+
+.cert-header {
+    font-size: 13px;
+    line-height: 1.7;
+    color: #333;
+    margin: 10px 40px;
+    text-transform: uppercase;
+}
+
+.cert-name {
+    font-size: 34px;
+    color: #1B3A5C;
+    border-bottom: 2px solid #6B8E23;
+    display: inline-block;
+    padding: 0 30px 8px;
+    margin: 15px 0;
+    letter-spacing: 1px;
+}
+
+.cert-body {
+    font-size: 12px;
+    line-height: 1.8;
+    color: #333;
+    margin: 20px 50px;
+    text-transform: uppercase;
+}
+
+.cert-date {
+    font-size: 13px;
+    color: #333;
+    margin-top: 15px;
+    font-weight: 600;
+}
+
+.cert-quote {
+    font-style: italic;
+    color: #1B3A5C;
+    font-size: 13px;
+    margin-top: 20px;
+}
+
+.cert-congrats {
+    font-weight: bold;
+    color: #6B8E23;
+    font-size: 13px;
+    margin-top: 6px;
+}
+
+.signatures {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 35px;
+}
+
+.signatures > div {
+    border-top: 1px solid #333;
+    padding-top: 6px;
+    min-width: 220px;
+    font-size: 11px;
+}
+
+.signatures span {
+    font-weight: bold;
+    color: #1B3A5C;
+    display: block;
+    text-transform: uppercase;
+}
+
+.signatures small {
+    color: #666;
+    font-size: 9px;
+    text-transform: uppercase;
+}
