@@ -37,8 +37,7 @@ document.getElementById('process-btn').addEventListener('click', async () => {
 
     try {
         for (const arquivo of arquivos) {
-            const texto = await extrairTextoPDF(arquivo);
-            const alunos = converterTextoEmAlunos(texto, trimestre);
+            const alunos = await converterTextoEmAlunos(arquivo, trimestre);
             alunosProcessados.push(...alunos);
         }
 
