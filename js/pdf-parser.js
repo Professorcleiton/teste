@@ -224,7 +224,7 @@ function encontrarColuna(tabelas, nota) {
 }
 
 // ============================================================
-//  DETECÇÃO DE ALUNOS — COM MESCLAGEM DE BLOCOS
+//  DETECÇÃO DE ALUNOS — versão final
 // ============================================================
 function extrairAlunosDasLinhas(linhas, trimestre) {
     const alunos = [];
@@ -243,7 +243,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
     if (tabelas.length === 0) return [];
 
-    // Filtra linhas relevantes
+    // Filtra linhas relevantes — SEM break!
     const linhasRelevantes = [];
     for (const linha of linhas) {
         const txt = linha.textoLinha;
@@ -251,9 +251,13 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
         if (/^T[123]\s*\|/.test(txt)) continue;
         if (/^ARTE\s*\|.*CIENCIAS/i.test(txt)) continue;
         if (/^MATEMATICA\s*\|.*CIDADANIA/i.test(txt)) continue;
-        if (/Total de registros abaixo/i.test(txt)) break;
+        if (/Total de registros abaixo/i.test(txt)) continue;
+        if (/^Nro\./.test(txt)) continue;
+        if (/^Disciplinas/.test(txt)) continue;
         linhasRelevantes.push(linha);
     }
+
+    console.log(`📝 ${linhasRelevantes.length} linhas relevantes`);
 
     // Agrupa em blocos por número de aluno
     const blocos = [];
@@ -291,10 +295,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
     console.log(`📦 ${blocos.length} blocos totais`);
 
-    // ============================================================
-    //  AGRUPA BLOCOS POR NÚMERO (mesmo aluno pode ter 2 blocos,
-    //  um para cada tabela do PDF)
-    // ============================================================
+    // Agrupa blocos por número
     const blocosPorNumero = {};
     for (const bloco of blocos) {
         if (!blocosPorNumero[bloco.numero]) {
@@ -305,9 +306,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
     console.log(`👥 ${Object.keys(blocosPorNumero).length} alunos únicos\n`);
 
-    // ============================================================
-    //  Processa cada aluno mesclando TODOS os seus blocos
-    // ============================================================
+    // Processa cada aluno
     for (const numeroStr of Object.keys(blocosPorNumero)) {
         const numero = parseInt(numeroStr);
         const blocosDoAluno = blocosPorNumero[numero];
@@ -319,7 +318,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
         const primeiroBloco = blocosDoAluno[0];
 
-        // Extrai nome — junta todas as partes em maiúsculas de todas as linhas
+        // Extrai nome
         const partesNome = [];
         for (let k = 0; k < todasAsLinhas.length; k++) {
             const linha = todasAsLinhas[k];
@@ -341,9 +340,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
         const nomeCompleto = partesNome.join(' ').replace(/\s+/g, ' ').trim();
         if (!nomeCompleto || nomeCompleto.length < 5) continue;
 
-        // ============================================================
-        //  MAPEIA NOTAS DE TODAS AS LINHAS
-        // ============================================================
+        // Mapeia notas
         const notasPorChave = {};
 
         for (let k = 0; k < todasAsLinhas.length; k++) {
