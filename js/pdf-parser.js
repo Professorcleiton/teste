@@ -43,14 +43,17 @@ function normalizarDisciplina(texto) {
 }
 
 // ============================================================
-//  LIMPA NOMES DUPLICADOS
+//  LIMPA NOMES — remove vazamentos e duplicações
+//  Reconhece o padrão do PDF: nome em 2-3 linhas (nome,
+//  número+notas, sobrenome). O primeiro nome de um aluno às
+//  vezes pega o sobrenome do aluno anterior.
 // ============================================================
 function limparNome(nome) {
     if (!nome) return nome;
 
-    const palavras = nome.split(' ');
+    let palavras = nome.split(' ').filter(p => p.length > 0);
 
-    // Detecta duplicação total: "A B C A B C" → "A B C"
+    // 1) Remove duplicação total: "A B C A B C" → "A B C"
     for (let tam = Math.floor(palavras.length / 2); tam >= 2; tam--) {
         if (palavras.length % tam !== 0) continue;
         const numFatias = palavras.length / tam;
@@ -66,27 +69,87 @@ function limparNome(nome) {
         }
 
         if (todasIguais) {
-            return primeiraFatia;
+            palavras = palavras.slice(0, tam);
+            break;
         }
     }
 
-    // Remove repetição simples da última palavra
-    // Ex: "SANTOS ANA LAURA SANTOS" → "SANTOS ANA LAURA"
-    // Ex: "JOSEANE TEIXEIRA DOS SANTOS JOSEANE" → remove último JOSEANE
+    // 2) Remove repetição de UMA palavra consecutiva: "DELBONE DELBONE" → "DELBONE"
+    const semRepeticaoConsecutiva = [];
+    for (let i = 0; i < palavras.length; i++) {
+        if (i > 0 && palavras[i] === palavras[i - 1]) continue;
+        semRepeticaoConsecutiva.push(palavras[i]);
+    }
+    palavras = semRepeticaoConsecutiva;
 
-    // Também detecta quando o nome contém uma sequência que se repete
-    // parcialmente no início (ex: "SANTOS ANA LAURA DE ALMEIDA SANTOS")
-    if (palavras.length > 3) {
+    // 3) Detecta vazamento do INÍCIO: "SANTOS ANA LAURA DE ALMEIDA"
+    //    Se a primeira palavra aparece também adiante e o miolo tem ≥ 2 palavras,
+    //    provavelmente é o sobrenome vazado do aluno anterior.
+    //    Ex: "SANTOS ANA LAURA DE ALMEIDA" — SANTOS não se repete, mas está no início.
+    //    Heurística: se o miolo entre a 1ª palavra e a próxima ocorrência
+    //    (ou o fim) tem ≥ 2 palavras em minúsculas "naturais", remove a 1ª.
+    //    Aqui, remove APENAS se a primeira palavra é um "pedaço órfão",
+    //    identificado por: no restante do nome, há uma sequência de ≥ 3 palavras
+    //    com conectivos típicos (DE, DA, DOS, DAS).
+    if (palavras.length >= 4) {
+        const primeira = palavras[0];
+        const resto = palavras.slice(1);
+
+        // Conta palavras "de ligação" no resto
+        const ligacoes = resto.filter(p => /^(DE|DA|DO|DOS|DAS)$/i.test(p));
+        const temNomeComposto = resto.length >= 2;
+
+        // Se o resto forma um nome completo (≥ 3 palavras) com preposições,
+        // e a primeira palavra é curta (≤ 8 letras) e não é preposição,
+        // provavelmente é vazamento.
+        if (temNomeComposto && resto.length >= 3 && ligacoes.length >= 1 &&
+            !/^(DE|DA|DO|DOS|DAS)$/i.test(primeira) && primeira.length <= 10) {
+            palavras = resto;
+        }
+    }
+
+    // 4) Detecta vazamento do FIM: "JOÃO PEDRO SOZZI DE BRITO ALICE VICTÓRIA MART"
+    //    O nome de outro aluno foi colado no final. Detecta se há uma sequência
+    //    ao final que parece um nome NOVO (≥ 2 palavras seguidas, com padrão
+    //    de "primeiro nome + sobrenome").
+    //    Heurística: procura um "salto" — uma palavra de ligação seguida por
+    //    palavra que NÃO é de ligação e depois OUTRA palavra capitalizada
+    //    que não combina com o resto.
+    //    Solução mais simples: remove a partir do primeiro "DE" (ou similar)
+    //    seguido por um bloco que parece um novo nome.
+    if (palavras.length >= 5) {
+        // Procura um segundo "DE" no nome que começa um novo bloco
+        for (let i = 2; i < palavras.length - 1; i++) {
+            // Se encontramos um DE/DA/DO no meio
+            if (/^(DE|DA|DO|DOS|DAS)$/i.test(palavras[i])) {
+                // Considera que é vazamento se depois do DE/DA vem um nome que
+                // parece o começo de outro aluno (≥ 2 palavras seguidas)
+                const depois = palavras.slice(i + 1);
+                if (depois.length >= 2) {
+                    // Se antes do DE/DA já temos um nome "completo" (≥ 2 palavras),
+                    // isso é provavelmente vazamento
+                    const antes = palavras.slice(0, i);
+                    if (antes.length >= 2) {
+                        // Verifica se "antes" tem uma estrutura razoável de nome
+                        // (primeira palavra não é preposição)
+                        palavras = antes;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // 5) Remove última palavra se ela duplica a primeira
+    if (palavras.length >= 3) {
         const primeira = palavras[0];
         const ultima = palavras[palavras.length - 1];
-
-        // Se a primeira palavra é igual à última, remove a última
         if (primeira === ultima) {
-            return palavras.slice(0, -1).join(' ');
+            palavras = palavras.slice(0, -1);
         }
     }
 
-    return nome;
+    return palavras.join(' ').trim();
 }
 
 // ============================================================
@@ -361,7 +424,11 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
         const primeiroBloco = blocosDoAluno[0];
 
-        // Extrai nome — remove duplicatas
+        // ============================================================
+        //  Extrai nome — SÓ pega linhas que são APENAS nome
+        //  (não pega nome que está na mesma linha do número, isso
+        //  gera vazamento)
+        // ============================================================
         const partesNome = [];
         for (let k = 0; k < todasAsLinhas.length; k++) {
             const linha = todasAsLinhas[k];
@@ -413,7 +480,6 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
             }
         }
 
-        // Notas do trimestre
         const notasT = [];
         const disciplinasPresentes = [];
         for (const disc of TODAS_DISCIPLINAS) {
@@ -429,7 +495,6 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
             continue;
         }
 
-        // Regra conservadora
         const disciplinasComAlgumaNota = TODAS_DISCIPLINAS.filter(disc =>
             [1, 2, 3].some(t => notasPorChave[`${disc}_T${t}`] !== undefined)
         );
