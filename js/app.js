@@ -4,17 +4,24 @@
 let alunosProcessados = [];
 
 // ============================================================
-//  Upload de arquivos
+//  Elementos
 // ============================================================
 const inputPDF = document.getElementById('pdf-input');
 const fileList = document.getElementById('file-list');
+const uploadSection = document.getElementById('upload-section');
+const reviewSection = document.getElementById('review-section');
+const status = document.getElementById('status');
+const genStatus = document.getElementById('gen-status');
 
+// ============================================================
+//  Upload de arquivos
+// ============================================================
 inputPDF.addEventListener('change', () => {
     fileList.innerHTML = '';
     for (const arquivo of inputPDF.files) {
         const div = document.createElement('div');
         div.className = 'file-item';
-        div.textContent = `📄 ${arquivo.name}`;
+        div.textContent = '📄 ' + arquivo.name;
         fileList.appendChild(div);
     }
 });
@@ -25,7 +32,6 @@ inputPDF.addEventListener('change', () => {
 document.getElementById('process-btn').addEventListener('click', async () => {
     const arquivos = inputPDF.files;
     const trimestre = parseInt(document.getElementById('trimestre').value);
-    const status = document.getElementById('status');
 
     if (arquivos.length === 0) {
         status.innerHTML = '<span class="erro">⚠️ Selecione pelo menos um PDF.</span>';
@@ -49,7 +55,7 @@ document.getElementById('process-btn').addEventListener('click', async () => {
         const elegiveis = alunosProcessados.filter(a => a.elegivel);
         status.innerHTML = `<span class="ok">✅ ${alunosProcessados.length} alunos processados, ${elegiveis.length} elegíveis.</span>`;
 
-        mostrarResultados(trimestre);
+        mostrarRevisao(trimestre);
     } catch (erro) {
         console.error(erro);
         status.innerHTML = `<span class="erro">❌ Erro: ${erro.message}</span>`;
@@ -57,101 +63,127 @@ document.getElementById('process-btn').addEventListener('click', async () => {
 });
 
 // ============================================================
-//  Mostra tabela de resultados
+//  Tela de revisão com nomes editáveis
 // ============================================================
-function mostrarResultados(trimestre) {
-    const section = document.getElementById('result-section');
-    section.style.display = 'block';
+function mostrarRevisao(trimestre) {
+    uploadSection.style.display = 'none';
+    reviewSection.style.display = 'block';
 
-    const summary = document.getElementById('summary');
     const elegiveis = alunosProcessados.filter(a => a.elegivel);
 
-    summary.innerHTML = `
-        <div class="stats">
-            <div class="stat">
-                <span class="valor">${alunosProcessados.length}</span>
-                <span class="label">Total</span>
-            </div>
-            <div class="stat destaque">
-                <span class="valor">${elegiveis.length}</span>
-                <span class="label">Elegíveis</span>
-            </div>
+    document.getElementById('review-summary').innerHTML = `
+        <div class="stat">
+            <span class="valor">${alunosProcessados.length}</span>
+            <span class="label">Total</span>
+        </div>
+        <div class="stat destaque">
+            <span class="valor">${elegiveis.length}</span>
+            <span class="label">Elegíveis</span>
         </div>
     `;
 
-    const tbody = document.querySelector('#students-table tbody');
+    const tbody = document.querySelector('#review-table tbody');
     tbody.innerHTML = '';
 
     alunosProcessados
-        .sort((a, b) => b.media - a.media)
-        .forEach(aluno => {
+        .sort((a, b) => a.numero - b.numero)
+        .forEach((aluno, idx) => {
+            const menor = aluno.notasTrimestre.length
+                ? Math.min(...aluno.notasTrimestre)
+                : 0;
+
             const tr = document.createElement('tr');
             tr.className = aluno.elegivel ? 'linha-elegivel' : 'linha-nao-elegivel';
+
             tr.innerHTML = `
-                <td>${aluno.elegivel ? `<input type="checkbox" class="check-aluno" data-numero="${aluno.numero}" checked>` : ''}</td>
                 <td>${aluno.numero}</td>
-                <td>${aluno.nome}</td>
-                <td>${aluno.turma.serie} ${aluno.turma.letra}</td>
-                <td>${aluno.media.toFixed(1)}</td>
+                <td>
+                    <input type="text" 
+                           class="nome-editavel" 
+                           value="${aluno.nome.replace(/"/g, '&quot;')}"
+                           data-idx="${idx}">
+                </td>
+                <td>${aluno.notasTrimestre.length}/${aluno.disciplinasEsperadas.length}</td>
+                <td>${menor.toFixed(1)}</td>
                 <td>
                     ${aluno.elegivel
                         ? '<span class="badge badge-ok">Elegível</span>'
-                        : '<span class="badge badge-no">Abaixo de 8,0</span>'}
+                        : '<span class="badge badge-no">Não</span>'}
                 </td>
             `;
             tbody.appendChild(tr);
         });
 
-    // Marca/desmarca todos
-    document.getElementById('check-all').onchange = (e) => {
-        document.querySelectorAll('.check-aluno').forEach(c => c.checked = e.target.checked);
-    };
+    // Habilita/desabilita botão de gerar
+    const btnGerar = document.getElementById('generate-btn');
+    btnGerar.disabled = elegiveis.length === 0;
+    btnGerar.textContent = elegiveis.length === 0
+        ? '📄 Nenhum aluno elegível'
+        : `📄 Gerar ${elegiveis.length} Certificado(s)`;
+
+    // Listener para salvar edições de nome
+    document.querySelectorAll('.nome-editavel').forEach(inp => {
+        inp.addEventListener('input', (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            alunosProcessados[idx].nome = e.target.value;
+        });
+    });
 }
 
 // ============================================================
-//  Botão: Gerar ZIP
+//  Botão: Gerar certificados
 // ============================================================
 document.getElementById('generate-btn').addEventListener('click', async () => {
     const trimestre = parseInt(document.getElementById('trimestre').value);
-    const selecionados = [...document.querySelectorAll('.check-aluno:checked')]
-        .map(c => alunosProcessados.find(a => a.numero === parseInt(c.dataset.numero)))
-        .filter(Boolean);
+    const elegiveis = alunosProcessados.filter(a => a.elegivel);
 
-    if (selecionados.length === 0) {
-        alert('Selecione pelo menos um aluno.');
+    if (elegiveis.length === 0) {
+        alert('Nenhum aluno elegível para gerar certificados.');
         return;
     }
 
     const btn = document.getElementById('generate-btn');
     btn.disabled = true;
+    genStatus.innerHTML = '<span class="processando">⏳ Gerando certificados...</span>';
 
     try {
-        await gerarTodosCertificados(selecionados, trimestre, (atual, total) => {
-            btn.textContent = `⏳ Gerando ${atual}/${total}...`;
-        });
-        btn.textContent = '✅ Concluído!';
-        setTimeout(() => {
-            btn.textContent = '📄 Gerar Certificados em ZIP';
-            btn.disabled = false;
-        }, 2000);
+        // Gera ZIP com todos os elegíveis
+        const zip = new JSZip();
+
+        for (let i = 0; i < elegiveis.length; i++) {
+            const aluno = elegiveis[i];
+            genStatus.innerHTML = `<span class="processando">⏳ Gerando ${i + 1}/${elegiveis.length}: ${aluno.nome}</span>`;
+
+            const pdfBlob = await gerarCertificadoBlob(aluno, trimestre);
+            const nomeArq = `certificado_${String(aluno.numero).padStart(2, '0')}_${aluno.nome.replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]/g, '')}.pdf`;
+            zip.file(nomeArq, pdfBlob);
+        }
+
+        genStatus.innerHTML = '<span class="processando">⏳ Empacotando ZIP...</span>';
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        saveAs(zipBlob, `certificados_${trimestre}trimestre.zip`);
+
+        genStatus.innerHTML = '<span class="ok">✅ Certificados gerados com sucesso!</span>';
+        btn.disabled = false;
     } catch (erro) {
         console.error(erro);
-        alert('Erro ao gerar: ' + erro.message);
+        genStatus.innerHTML = `<span class="erro">❌ Erro: ${erro.message}</span>`;
         btn.disabled = false;
-        btn.textContent = '📄 Gerar Certificados em ZIP';
     }
 });
 
 // ============================================================
-//  Botão: Pré-visualizar 1 certificado
+//  Botão: Recomeçar
 // ============================================================
-document.getElementById('preview-btn').addEventListener('click', async () => {
-    const trimestre = parseInt(document.getElementById('trimestre').value);
-    const primeiro = alunosProcessados.find(a => a.elegivel);
-    if (!primeiro) {
-        alert('Nenhum aluno elegível para pré-visualizar.');
-        return;
-    }
-    const doc = await gerarCertificadoPDF(primeiro, trimestre);
-    doc.output('dataurlnewwindow');
+document.getElementById('restart-btn').addEventListener('click', () => {
+    if (!confirm('Recomeçar? Todos os dados serão perdidos.')) return;
+
+    alunosProcessados = [];
+    inputPDF.value = '';
+    fileList.innerHTML = '';
+    status.innerHTML = '';
+    genStatus.innerHTML = '';
+
+    reviewSection.style.display = 'none';
+    uploadSection.style.display = 'block';
 });
