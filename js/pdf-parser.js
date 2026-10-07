@@ -91,12 +91,10 @@ async function extrairLinhasEstruturadas(arquivo) {
 
 // ============================================================
 //  DETECTA TODAS AS TABELAS DO PDF
-//  Cada tabela tem: página, yTopo, yBase, colunas[]
 // ============================================================
 function detectarTabelas(linhas) {
     const tabelas = [];
 
-    // Encontra todas as linhas de cabeçalho (com ≥3 disciplinas reconhecidas)
     const cabecalhos = [];
     for (const linha of linhas) {
         const disciplinas = [];
@@ -113,12 +111,10 @@ function detectarTabelas(linhas) {
 
     console.log(`🔍 ${cabecalhos.length} cabeçalhos potenciais`);
 
-    // Para cada cabeçalho, encontra a linha T1 T2 T3 abaixo
     for (let idx = 0; idx < cabecalhos.length; idx++) {
         const cab = cabecalhos[idx];
         const linhaCab = cab.linha;
 
-        // Acha a linha T1 T2 T3 mais próxima abaixo do cabeçalho
         let melhorLinhaT = null;
         let menorDist = Infinity;
 
@@ -138,7 +134,6 @@ function detectarTabelas(linhas) {
 
         if (!melhorLinhaT) continue;
 
-        // Constrói colunas
         const celulasT = melhorLinhaT.celulasComX.filter(c => /^T[123]$/.test(c.texto));
         const colunas = [];
 
@@ -163,7 +158,6 @@ function detectarTabelas(linhas) {
             }
         });
 
-        // Bins (faixas de X)
         for (let i = 0; i < colunas.length; i++) {
             const atual = colunas[i];
             const anterior = colunas[i - 1];
@@ -172,23 +166,16 @@ function detectarTabelas(linhas) {
             atual.xMax = proxima ? (atual.x + proxima.x) / 2 : atual.x + 12;
         }
 
-        // ============================================================
-        //  ✅ CÁLCULO CORRETO DO yBase
-        //  É o Y do PRÓXIMO CABEÇALHO de disciplina na MESMA PÁGINA
-        //  que esteja ABAIXO do atual. Se não houver, é 20 (fim da página).
-        // ============================================================
-        let yBase = 20;  // padrão: fim da página
+        let yBase = 20;
 
-        // Procura o próximo cabeçalho na mesma página com Y menor
         const proximoCab = cabecalhos
             .filter(c =>
                 c.linha.pagina === linhaCab.pagina &&
                 c.linha.y < linhaCab.y - 5
             )
-            .sort((a, b) => b.linha.y - a.linha.y)[0];  // o mais próximo abaixo
+            .sort((a, b) => b.linha.y - a.linha.y)[0];
 
         if (proximoCab) {
-            // yBase é logo ACIMA do próximo cabeçalho
             yBase = proximoCab.linha.y + 15;
         }
 
@@ -207,10 +194,9 @@ function detectarTabelas(linhas) {
 }
 
 // ============================================================
-//  ENCONTRA A COLUNA CORRETA PARA UMA NOTA (considerando página+Y+X)
+//  ENCONTRA A COLUNA PARA UMA NOTA (considerando página+Y+X)
 // ============================================================
 function encontrarColuna(tabelas, nota) {
-    // Filtra tabelas da mesma página cuja faixa Y contenha o Y da nota
     const candidatas = tabelas.filter(t =>
         t.pagina === nota.pagina &&
         nota.y >= t.yBase &&
@@ -219,11 +205,8 @@ function encontrarColuna(tabelas, nota) {
 
     if (candidatas.length === 0) return null;
 
-    // Prefere a tabela com yTopo mais próximo (a mais específica)
-    // Se houver apenas 1, usa direto.
     let tabela = candidatas[0];
     if (candidatas.length > 1) {
-        // Se a nota está em uma faixa que se sobrepõe, escolhe a mais "interna"
         tabela = candidatas.reduce((melhor, t) => {
             const distMelhor = Math.abs(nota.y - melhor.yTopo);
             const distAtual = Math.abs(nota.y - t.yTopo);
@@ -231,7 +214,6 @@ function encontrarColuna(tabelas, nota) {
         });
     }
 
-    // Procura a coluna pela faixa de X
     for (const col of tabela.colunas) {
         if (nota.x >= col.xMin && nota.x < col.xMax) {
             return col;
@@ -242,7 +224,7 @@ function encontrarColuna(tabelas, nota) {
 }
 
 // ============================================================
-//  DETECÇÃO DE ALUNOS
+//  DETECÇÃO DE ALUNOS — COM MESCLAGEM DE BLOCOS
 // ============================================================
 function extrairAlunosDasLinhas(linhas, trimestre) {
     const alunos = [];
@@ -307,19 +289,42 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
     }
     if (blocoAtual) blocos.push(blocoAtual);
 
-    console.log(`📦 ${blocos.length} blocos de alunos`);
+    console.log(`📦 ${blocos.length} blocos totais`);
 
-    // Processa cada bloco
+    // ============================================================
+    //  AGRUPA BLOCOS POR NÚMERO (mesmo aluno pode ter 2 blocos,
+    //  um para cada tabela do PDF)
+    // ============================================================
+    const blocosPorNumero = {};
     for (const bloco of blocos) {
-        const numero = bloco.numero;
-        if (alunos.find(a => a.numero === numero)) continue;
+        if (!blocosPorNumero[bloco.numero]) {
+            blocosPorNumero[bloco.numero] = [];
+        }
+        blocosPorNumero[bloco.numero].push(bloco);
+    }
 
-        // Monta nome
+    console.log(`👥 ${Object.keys(blocosPorNumero).length} alunos únicos\n`);
+
+    // ============================================================
+    //  Processa cada aluno mesclando TODOS os seus blocos
+    // ============================================================
+    for (const numeroStr of Object.keys(blocosPorNumero)) {
+        const numero = parseInt(numeroStr);
+        const blocosDoAluno = blocosPorNumero[numero];
+
+        const todasAsLinhas = [];
+        for (const b of blocosDoAluno) {
+            todasAsLinhas.push(...b.linhas);
+        }
+
+        const primeiroBloco = blocosDoAluno[0];
+
+        // Extrai nome — junta todas as partes em maiúsculas de todas as linhas
         const partesNome = [];
-        for (let k = 0; k < bloco.linhas.length; k++) {
-            const linha = bloco.linhas[k];
+        for (let k = 0; k < todasAsLinhas.length; k++) {
+            const linha = todasAsLinhas[k];
             const textos = linha.celulasComX.map(c => c.texto);
-            const inicioIdx = (k === 0) ? bloco.idxNum + 1 : 0;
+            const inicioIdx = (k === 0) ? (primeiroBloco.idxNum + 1) : 0;
 
             for (let j = inicioIdx; j < textos.length; j++) {
                 const c = textos[j].trim();
@@ -337,13 +342,13 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
         if (!nomeCompleto || nomeCompleto.length < 5) continue;
 
         // ============================================================
-        //  MAPEIA AS NOTAS DE CADA LINHA USANDO PÁGINA + Y + X
+        //  MAPEIA NOTAS DE TODAS AS LINHAS
         // ============================================================
         const notasPorChave = {};
 
-        for (let k = 0; k < bloco.linhas.length; k++) {
-            const linha = bloco.linhas[k];
-            const inicioIdx = (k === 0) ? bloco.idxNum + 1 : 0;
+        for (let k = 0; k < todasAsLinhas.length; k++) {
+            const linha = todasAsLinhas[k];
+            const inicioIdx = (k === 0) ? (primeiroBloco.idxNum + 1) : 0;
 
             for (let j = inicioIdx; j < linha.celulasComX.length; j++) {
                 const c = linha.celulasComX[j];
