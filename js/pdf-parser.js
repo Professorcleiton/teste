@@ -5,12 +5,48 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ============================================================
-//  DISCIPLINAS NA ORDEM DO PDF
+//  DISCIPLINAS — nomes simplificados para chave interna
+//  Cada PDF tem 2 tabelas com disciplinas diferentes
 // ============================================================
-const DISCIPLINAS_ORDEM = [
+const DISCIPLINAS_TABELA_1 = [
     'ARTE', 'CIENCIAS', 'EDDIG', 'EDFIS', 'ENSREL',
     'GEOGRAFIA', 'HISTORIA', 'INGLES', 'PORTUGUES'
 ];
+
+const DISCIPLINAS_TABELA_2 = [
+    'MATEMATICA', 'CIDADANIA', 'EDFIN', 'LEITURA', 'ESPANHOL', 'RECAPREND'
+];
+
+const TODAS_DISCIPLINAS = [...DISCIPLINAS_TABELA_1, ...DISCIPLINAS_TABELA_2];
+
+// ============================================================
+//  NORMALIZAÇÃO DE NOMES DE DISCIPLINAS
+//  Detecta pelo texto do cabeçalho qual é a disciplina
+// ============================================================
+function normalizarDisciplina(texto) {
+    const t = texto.toUpperCase().replace(/\s+/g, ' ').trim();
+
+    // Tabela 1
+    if (/^ARTE/.test(t)) return 'ARTE';
+    if (/^CIENCIAS/.test(t)) return 'CIENCIAS';
+    if (/^ED\s*DIG/.test(t)) return 'EDDIG';
+    if (/^EDUCACAO\s*FIS/.test(t)) return 'EDFIS';
+    if (/^ENSINO\s*RELIG/.test(t)) return 'ENSREL';
+    if (/^GEOGRAFIA/.test(t)) return 'GEOGRAFIA';
+    if (/^HISTORIA/.test(t)) return 'HISTORIA';
+    if (/^LINGUA\s*INGLE/.test(t) || /^INGLES/.test(t)) return 'INGLES';
+    if (/^LINGUA\s*PORTU/.test(t) || /^PORTUGUES/.test(t)) return 'PORTUGUES';
+
+    // Tabela 2
+    if (/^MATEMATICA/.test(t)) return 'MATEMATICA';
+    if (/^CIDADANIA/.test(t)) return 'CIDADANIA';
+    if (/^EDUCACAO\s*FIN/.test(t) || /^ED\s*FIN/.test(t)) return 'EDFIN';
+    if (/^LEITURA/.test(t)) return 'LEITURA';
+    if (/^LINGUA\s*ESPAN/.test(t) || /^ESPANHOL/.test(t)) return 'ESPANHOL';
+    if (/^REC\s*APREND/.test(t)) return 'RECAPREND';
+
+    return null;
+}
 
 // ============================================================
 //  EXTRAÇÃO POR COORDENADAS
@@ -60,72 +96,127 @@ async function extrairLinhasEstruturadas(arquivo) {
 }
 
 // ============================================================
-//  DETECTA AS FAIXAS (BINS) DE CADA COLUNA
-//  Cada disciplina tem 3 sub-colunas (T1, T2, T3)
-//  Calculamos o X central e uma largura de faixa (~18px)
+//  DETECTA AS COLUNAS DE CADA TABELA (por página + Y do cabeçalho)
+//  Retorna um array de "tabelas", cada uma com seu conjunto de colunas
 // ============================================================
-function detectarColunasComBins(linhas) {
-    // Encontra linha T1 T2 T3
-    let linhaT = null;
-    for (const l of linhas) {
-        const tCount = l.celulasComX.filter(c => /^T[123]$/.test(c.texto)).length;
-        if (tCount >= 20) { linhaT = l; break; }
-    }
-    if (!linhaT) {
-        console.error('❌ Linha T1/T2/T3 não encontrada');
-        return null;
-    }
+function detectarTodasAsTabelas(linhas) {
+    const tabelas = [];
 
-    const celulasT = linhaT.celulasComX.filter(c => /^T[123]$/.test(c.texto));
-    console.log(`📐 Encontradas ${celulasT.length} células T1/T2/T3`);
+    for (const linha of linhas) {
+        const textos = linha.celulasComX.map(c => c.texto);
 
-    // Cada 3 células T = 1 disciplina
-    if (celulasT.length !== 27) {
-        console.error(`❌ Esperado 27 células T, encontrado ${celulasT.length}`);
-        return null;
-    }
-
-    // Cria 27 colunas com (disciplina, trimestre, xCentro, xMin, xMax)
-    const colunas = [];
-    celulasT.forEach((cT, idx) => {
-        const idxDisc = Math.floor(idx / 3);
-        const disciplina = DISCIPLINAS_ORDEM[idxDisc];
-        const trimestre = parseInt(cT.texto[1]);
-
-        // Faixa: do meio entre vizinhos
-        const meioEsq = idx > 0 ? (celulasT[idx - 1].x + cT.x) / 2 : cT.x - 12;
-        const meioDir = idx < celulasT.length - 1 ? (cT.x + celulasT[idx + 1].x) / 2 : cT.x + 12;
-
-        colunas.push({
-            xCentro: cT.x,
-            xMin: meioEsq,
-            xMax: meioDir,
-            disciplina,
-            trimestre,
-            idx
+        // Procura linhas de cabeçalho de disciplinas
+        // Uma linha é cabeçalho se tem pelo menos 3 disciplinas reconhecidas
+        const disciplinasDetectadas = [];
+        linha.celulasComX.forEach(c => {
+            const disc = normalizarDisciplina(c.texto);
+            if (disc) {
+                disciplinasDetectadas.push({ x: c.x, disciplina: disc, texto: c.texto });
+            }
         });
-    });
 
-    console.log('🎯 Colunas (com faixas):');
-    colunas.forEach(c => {
-        console.log(`   ${c.disciplina}_T${c.trimestre}  X∈[${c.xMin.toFixed(0)}..${c.xMax.toFixed(0)}] centro=${c.xCentro.toFixed(0)}`);
-    });
+        if (disciplinasDetectadas.length < 3) continue;
 
-    return colunas;
+        // Encontra a linha T1 T2 T3 IMEDIATAMENTE ABAIXO desse cabeçalho
+        // (ela deve estar na mesma página e com Y menor)
+        let linhaT = null;
+        let menorDistanciaY = Infinity;
+
+        for (const l of linhas) {
+            if (l.pagina !== linha.pagina) continue;
+            if (l.y >= linha.y) continue;  // precisa estar ABAIXO
+
+            const celulasT = l.celulasComX.filter(c => /^T[123]$/.test(c.texto));
+            if (celulasT.length < disciplinasDetectadas.length * 2) continue;
+
+            const dist = linha.y - l.y;
+            if (dist < 30 && dist < menorDistanciaY) {
+                menorDistanciaY = dist;
+                linhaT = l;
+            }
+        }
+
+        if (!linhaT) {
+            console.warn(`⚠️ Cabeçalho detectado mas sem linha T1/T2/T3 correspondente`);
+            continue;
+        }
+
+        // Constrói as colunas
+        const celulasT = linhaT.celulasComX.filter(c => /^T[123]$/.test(c.texto));
+
+        // Mapeia cada coluna T para a disciplina cujo X é mais próximo
+        const colunas = [];
+        celulasT.forEach(cT => {
+            let melhorDisc = null;
+            let menorDist = 40;
+
+            for (const d of disciplinasDetectadas) {
+                const dist = Math.abs(d.x - cT.x);
+                if (dist < menorDist) {
+                    menorDist = dist;
+                    melhorDisc = d;
+                }
+            }
+
+            if (melhorDisc) {
+                colunas.push({
+                    x: cT.x,
+                    disciplina: melhorDisc.disciplina,
+                    trimestre: parseInt(cT.texto[1]),
+                    xDisciplina: melhorDisc.x
+                });
+            }
+        });
+
+        // Cria "bins" (faixas) entre colunas
+        for (let i = 0; i < colunas.length; i++) {
+            const atual = colunas[i];
+            const anterior = colunas[i - 1];
+            const proxima = colunas[i + 1];
+
+            atual.xMin = anterior ? (anterior.x + atual.x) / 2 : atual.x - 12;
+            atual.xMax = proxima ? (atual.x + proxima.x) / 2 : atual.x + 12;
+        }
+
+        tabelas.push({
+            pagina: linha.pagina,
+            yCabecalho: linha.y,
+            colunas,
+            disciplinas: disciplinasDetectadas.map(d => d.disciplina)
+        });
+
+        console.log(`📋 Tabela detectada na página ${linha.pagina}: ${disciplinasDetectadas.length} disciplinas`);
+        disciplinasDetectadas.forEach(d => console.log(`   X=${d.x.toFixed(0)} → ${d.disciplina} (${d.texto})`));
+        console.log(`   ${colunas.length} colunas T1/T2/T3`);
+    }
+
+    return tabelas;
 }
 
 // ============================================================
-//  LOCALIZA COLUNA PELO X (dentro de uma faixa)
+//  ENCONTRA EM QUAL TABELA E COLUNA CAI UMA NOTA
 // ============================================================
-function colunaPorX(colunas, x) {
-    for (const col of colunas) {
-        if (x >= col.xMin && x < col.xMax) return col;
+function encontrarColunaPorX(tabelas, x, y) {
+    // Procura a tabela que contém essa faixa Y (na mesma página)
+    // Como não sabemos a página exata, testamos todas
+    for (const tabela of tabelas) {
+        for (const col of tabela.colunas) {
+            if (x >= col.xMin && x < col.xMax) {
+                return col;
+            }
+        }
     }
-    // Se não achou, usa o centro mais próximo com tolerância
-    let melhor = null, menorDist = 25;
-    for (const col of colunas) {
-        const d = Math.abs(col.xCentro - x);
-        if (d < menorDist) { menorDist = d; melhor = col; }
+    // Fallback: coluna mais próxima em X (tolerância larga)
+    let melhor = null;
+    let menorDist = 30;
+    for (const tabela of tabelas) {
+        for (const col of tabela.colunas) {
+            const dist = Math.abs(col.x - x);
+            if (dist < menorDist) {
+                menorDist = dist;
+                melhor = col;
+            }
+        }
     }
     return melhor;
 }
@@ -145,145 +236,164 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
         }
     }
 
-    const colunas = detectarColunasComBins(linhas);
-    if (!colunas) { console.error('❌ Sem colunas'); return []; }
+    // Detectar todas as tabelas
+    const tabelas = detectarTodasAsTabelas(linhas);
+    console.log(`\n📚 TOTAL: ${tabelas.length} tabelas detectadas\n`);
 
-    // Filtra linhas relevantes
+    if (tabelas.length === 0) {
+        console.error('❌ Nenhuma tabela detectada');
+        return [];
+    }
+
+    // Filtra linhas relevantes (remove cabeçalhos)
     const linhasRelevantes = [];
     for (const linha of linhas) {
         const txt = linha.textoLinha;
-        if (/GOVERNO|SECRETARIA|CRUZEIRO|ANCHIETA|Curso:|RELATÓRIO|Sistema Escola|DATA:/i.test(txt)) continue;
-        if (/^T[123]\s*\|/.test(txt)) continue;
+        if (/GOVERNO|SECRETARIA|CRUZEIRO|ANCHIETA|Curso:|RELATÓRIO|Sistema Escola|DATA:|^T[123]\s*\|/i.test(txt)) continue;
         if (/^ARTE\s*\|.*CIENCIAS/i.test(txt)) continue;
+        if (/^MATEMATICA\s*\|.*CIDADANIA/i.test(txt)) continue;
         if (/Total de registros abaixo/i.test(txt)) break;
         linhasRelevantes.push(linha);
     }
 
-    let nomeBuffer = [];
+    // Agrupa em blocos por número de aluno
+    const blocos = [];
+    let blocoAtual = null;
 
     for (let i = 0; i < linhasRelevantes.length; i++) {
         const linha = linhasRelevantes[i];
-        const celulas = linha.celulasComX;
-        const textos = celulas.map(c => c.texto);
+        const textos = linha.celulasComX.map(c => c.texto);
 
-        // Linha só de nome?
-        const textoLimpo = textos.join(' ').trim();
-        const temNumero = textos.some(c => /^\d{1,2}$/.test(c));
-        const ehSóNome = !temNumero &&
-                        /^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(textoLimpo) &&
-                        textoLimpo.length >= 8 &&
-                        !/ARTE|CIENCIAS|DISCIPLINAS/i.test(textoLimpo);
-
-        if (ehSóNome) {
-            nomeBuffer.push(textoLimpo);
-            if (nomeBuffer.length > 3) nomeBuffer.shift();
-            continue;
-        }
-
-        // Detecta número
+        let numeroDaLinha = null;
         let idxNum = -1;
         for (let j = 0; j < Math.min(textos.length, 2); j++) {
             if (/^\d{1,2}$/.test(textos[j])) {
                 const n = parseInt(textos[j]);
-                if (n >= 1 && n <= 99) { idxNum = j; break; }
-            }
-        }
-        if (idxNum === -1) { nomeBuffer = []; continue; }
-
-        const numero = parseInt(textos[idxNum]);
-        if (alunos.find(a => a.numero === numero)) { nomeBuffer = []; continue; }
-
-        // Nome inline
-        let nomeInline = '';
-        for (let j = idxNum + 1; j < textos.length; j++) {
-            const c = textos[j];
-            if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{2,}$/.test(c) && !/^\d/.test(c)) {
-                nomeInline = c;
-                break;
-            }
-            if (/^\d{1,2}[.,]\d$/.test(c) || c === '--') break;
-        }
-
-        const partes = [...nomeBuffer];
-        if (nomeInline) partes.push(nomeInline);
-        let nome = partes.join(' ').replace(/\s+/g, ' ').trim();
-
-        if (nome.split(' ').length < 2 && i + 1 < linhasRelevantes.length) {
-            const prox = linhasRelevantes[i + 1];
-            const proxTextos = prox.celulasComX.map(c => c.texto);
-            const proxTxt = proxTextos.join(' ').trim();
-            if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{3,}$/.test(proxTxt) &&
-                !proxTextos.some(c => /^\d{1,2}$/.test(c))) {
-                nome = (nome + ' ' + proxTxt).trim();
-            }
-        }
-
-        if (!nome || nome.length < 5) { nomeBuffer = []; continue; }
-
-        // ============================================================
-        //  MAPEAMENTO POR FAIXA DE X (bins)
-        // ============================================================
-        const notasPorChave = {};
-
-        // Processa cada célula após o número
-        for (let j = idxNum + 1; j < celulas.length; j++) {
-            const c = celulas[j];
-            // Só notas
-            if (!/^\d{1,2}[.,]\d$/.test(c.texto)) continue;
-
-            const valor = parseFloat(c.texto.replace(',', '.'));
-            if (isNaN(valor) || valor < 0 || valor > 10) continue;
-
-            const col = colunaPorX(colunas, c.x);
-            if (col) {
-                const chave = `${col.disciplina}_T${col.trimestre}`;
-                // Só sobrescreve se ainda não existe
-                if (notasPorChave[chave] === undefined) {
-                    notasPorChave[chave] = valor;
+                if (n >= 1 && n <= 99) {
+                    const temNota = textos.some(t => /^\d{1,2}[.,]\d$/.test(t));
+                    const temNomeDepois = textos.slice(j + 1).some(t => /^[A-ZÀ-Ú]/.test(t));
+                    if (temNota || temNomeDepois) {
+                        numeroDaLinha = n;
+                        idxNum = j;
+                        break;
+                    }
                 }
             }
         }
 
-        // Notas do trimestre
+        if (numeroDaLinha !== null) {
+            if (blocoAtual) blocos.push(blocoAtual);
+            blocoAtual = { numero: numeroDaLinha, idxNum, linhas: [linha] };
+        } else if (blocoAtual) {
+            blocoAtual.linhas.push(linha);
+        }
+    }
+    if (blocoAtual) blocos.push(blocoAtual);
+
+    console.log(`📦 ${blocos.length} blocos de alunos\n`);
+
+    // Processa cada bloco
+    for (const bloco of blocos) {
+        const numero = bloco.numero;
+        if (alunos.find(a => a.numero === numero)) continue;
+
+        // Extrai o nome completo (todas as partes em maiúsculas)
+        const partesNome = [];
+        for (let k = 0; k < bloco.linhas.length; k++) {
+            const linha = bloco.linhas[k];
+            const textos = linha.celulasComX.map(c => c.texto);
+            const inicioIdx = (k === 0) ? bloco.idxNum + 1 : 0;
+
+            for (let j = inicioIdx; j < textos.length; j++) {
+                const c = textos[j].trim();
+                if (!c) continue;
+                if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{2,}$/.test(c) && !/^\d/.test(c)) {
+                    if (normalizarDisciplina(c)) continue;  // pula nome de disciplina
+                    if (/^(DISCIPLINAS|RELATÓRIO)/.test(c)) continue;
+                    partesNome.push(c);
+                }
+                if (/^\d{1,2}[.,]\d$/.test(c) || c === '--') break;
+            }
+        }
+
+        let nomeCompleto = partesNome.join(' ').replace(/\s+/g, ' ').trim();
+        if (!nomeCompleto || nomeCompleto.length < 5) continue;
+
+        // ============================================================
+        //  MAPEIA AS NOTAS DE TODAS AS TABELAS
+        // ============================================================
+        const notasPorChave = {};
+
+        for (let k = 0; k < bloco.linhas.length; k++) {
+            const linha = bloco.linhas[k];
+            const celulas = linha.celulasComX;
+            const inicioIdx = (k === 0) ? bloco.idxNum + 1 : 0;
+
+            for (let j = inicioIdx; j < celulas.length; j++) {
+                const c = celulas[j];
+                if (!/^\d{1,2}[.,]\d$/.test(c.texto)) continue;
+
+                const valor = parseFloat(c.texto.replace(',', '.'));
+                if (isNaN(valor) || valor < 0 || valor > 10) continue;
+
+                const col = encontrarColunaPorX(tabelas, c.x, c.y);
+                if (col) {
+                    const chave = `${col.disciplina}_T${col.trimestre}`;
+                    if (notasPorChave[chave] === undefined) {
+                        notasPorChave[chave] = valor;
+                    }
+                }
+            }
+        }
+
+        // Pega notas do trimestre
         const notasT = [];
-        for (const disc of DISCIPLINAS_ORDEM) {
+        const disciplinasPresentes = [];
+        for (const disc of TODAS_DISCIPLINAS) {
             const chave = `${disc}_T${trimestre}`;
             if (notasPorChave[chave] !== undefined) {
                 notasT.push(notasPorChave[chave]);
+                disciplinasPresentes.push(disc);
             }
         }
 
         if (notasT.length === 0) {
-            console.warn(`⚠️ Aluno ${numero} (${nome}): nenhuma nota T${trimestre} mapeada`);
-            nomeBuffer = [];
+            console.warn(`⚠️ Aluno ${numero} (${nomeCompleto}): sem notas T${trimestre}`);
             continue;
         }
 
-        // Regra CONSERVADORA: só elegível se tiver notas para TODAS
-        // as disciplinas que aparecem no trimestre escolhido
-        // (evita certificar por falta de dados)
-        const disciplinasComNotaNoTri = DISCIPLINAS_ORDEM.filter(disc =>
+        // ============================================================
+        //  REGRA CONSERVADORA:
+        //  - Elegível SÓ SE o aluno tem notas para TODAS as disciplinas
+        //    que ele possui em QUALQUER trimestre (evita certificar
+        //    por falta de dados)
+        //  - E TODAS essas notas ≥ 8.0
+        // ============================================================
+        const disciplinasComAlgumaNota = TODAS_DISCIPLINAS.filter(disc =>
+            [1, 2, 3].some(t => notasPorChave[`${disc}_T${t}`] !== undefined)
+        );
+
+        const temTodasNoTrimestre = disciplinasComAlgumaNota.every(disc =>
             notasPorChave[`${disc}_T${trimestre}`] !== undefined
         );
 
-        // Verifica se alguma disciplina esperada está faltando
-        // (ou seja, se o PDF mostra T1 dela para esse aluno)
-        // Regra atual: todas as disciplinas que o aluno TEM nota contam
-
         const todasNotasOk = notasT.every(n => n >= CONFIG.notaMinima);
-        const elegivel = todasNotasOk && notasT.length >= 5;
+        const elegivel = temTodasNoTrimestre && todasNotasOk;
 
         alunos.push({
             numero,
-            nome,
+            nome: nomeCompleto,
             turma: { ...turma },
             notasPorChave,
             notasTrimestre: notasT,
+            disciplinasPresentes,
+            disciplinasEsperadas: disciplinasComAlgumaNota,
             media: notasT.reduce((a, b) => a + b, 0) / notasT.length,
-            elegivel
+            elegivel,
+            motivoNaoElegivel: !temTodasNoTrimestre
+                ? 'Faltam notas em algumas disciplinas'
+                : (!todasNotasOk ? 'Alguma nota < 8.0' : null)
         });
-
-        nomeBuffer = [];
     }
 
     return alunos.sort((a, b) => a.numero - b.numero);
