@@ -6,27 +6,28 @@
     <title>Certificados CCM-PR Anchieta</title>
     <link rel="stylesheet" href="css/style.css">
 
-    <!-- Biblioteca PDF.js (ler PDFs) -->
+    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <!-- html2canvas (transformar HTML em imagem) -->
+    <!-- html2canvas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <!-- jsPDF (gerar PDF) -->
+    <!-- jsPDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- JSZip (empacotar vários PDFs) -->
+    <!-- JSZip -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <!-- FileSaver (baixar arquivos) -->
+    <!-- FileSaver -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
 <body>
 
 <div class="container">
     <header>
-        <img src="assets/logo-ccmpr.png" alt="Brasão CCM-PR" class="header-logo">
+        <img src="assets/logo-ccmpr.png" alt="Brasão CCM-PR" class="header-logo"
+             onerror="this.style.display='none'">
         <h1>🎓 Certificados de Menção Honrosa</h1>
         <p>Colégio Estadual Cívico-Militar Anchieta — Cruzeiro do Oeste</p>
     </header>
 
-    <!-- ===== ETAPA 1: UPLOAD ===== -->
+    <!-- ETAPA 1: UPLOAD -->
     <section id="upload-section" class="card">
         <h2>1. Importar Relatório do Sistema Escolar</h2>
 
@@ -51,20 +52,23 @@
         <div id="status"></div>
     </section>
 
-    <!-- ===== ETAPA 2: RESULTADO ===== -->
-    <section id="result-section" class="card" style="display:none;">
-        <h2>2. Alunos Elegíveis</h2>
-        <div id="summary"></div>
+    <!-- ETAPA 2: REVISÃO DE NOMES -->
+    <section id="review-section" class="card" style="display:none;">
+        <h2>2. Revise os Nomes dos Alunos</h2>
+        <p style="font-size:13px; color:#666; margin-bottom:15px;">
+            ⚠️ Alguns nomes podem ter vindo errados do PDF. Corrija-os abaixo antes de gerar os certificados.
+        </p>
+
+        <div id="review-summary" class="stats"></div>
 
         <div class="table-wrapper">
-            <table id="students-table">
+            <table id="review-table">
                 <thead>
                     <tr>
-                        <th><input type="checkbox" id="check-all" checked></th>
                         <th>#</th>
-                        <th>Nome</th>
-                        <th>Turma</th>
-                        <th>Média</th>
+                        <th>Nome (clique para editar)</th>
+                        <th>Disciplinas</th>
+                        <th>Menor Nota</th>
                         <th>Situação</th>
                     </tr>
                 </thead>
@@ -73,20 +77,23 @@
         </div>
 
         <div class="actions">
-            <button id="generate-btn" class="btn-primary">
-                📄 Gerar Certificados em ZIP
+            <button id="generate-btn" class="btn-primary" disabled>
+                📄 Gerar Certificados dos Elegíveis
             </button>
-            <button id="preview-btn" class="btn-secondary">
-                👁 Pré-visualizar 1 Certificado
+            <button id="restart-btn" class="btn-secondary">
+                🔄 Recomeçar
             </button>
         </div>
+
+        <div id="gen-status" style="margin-top:15px;"></div>
     </section>
 </div>
 
-<!-- ===== TEMPLATE DO CERTIFICADO ===== -->
-<div id="certificate-template">
+<!-- Template do certificado (oculto) -->
+<div id="certificate-template" style="position:absolute; left:-9999px;">
     <div class="certificate" id="cert-render">
-        <img src="assets/logo-ccmpr.png" class="cert-logo" alt="Logo">
+        <img src="assets/logo-ccmpr.png" class="cert-logo" alt=""
+             onerror="this.style.display='none'">
         <h2 class="cert-title">Certificado de Menção Honrosa</h2>
 
         <p class="cert-header">
@@ -127,7 +134,7 @@
     </div>
 </div>
 
-<!-- Scripts na ordem correta -->
+<!-- Scripts -->
 <script src="js/config.js"></script>
 <script src="js/pdf-parser.js"></script>
 <script src="js/certificate.js"></script>
