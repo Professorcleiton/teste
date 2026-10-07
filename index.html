@@ -6,15 +6,10 @@
     <title>Certificados CCM-PR Anchieta</title>
     <link rel="stylesheet" href="css/style.css">
 
-    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <!-- html2canvas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <!-- jsPDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- JSZip -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <!-- FileSaver -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
 <body>
@@ -52,7 +47,7 @@
         <div id="status"></div>
     </section>
 
-    <!-- ETAPA 2: REVISÃO DE NOMES -->
+    <!-- ETAPA 2: REVISÃO -->
     <section id="review-section" class="card" style="display:none;">
         <h2>2. Revise os Nomes dos Alunos</h2>
         <p style="font-size:13px; color:#666; margin-bottom:15px;">
@@ -70,6 +65,7 @@
                         <th>Disciplinas</th>
                         <th>Menor Nota</th>
                         <th>Situação</th>
+                        <th>Ações</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -77,8 +73,14 @@
         </div>
 
         <div class="actions">
+            <button id="preview-all-btn" class="btn-preview">
+                👁 Pré-visualizar Todos os Elegíveis
+            </button>
             <button id="generate-btn" class="btn-primary" disabled>
                 📄 Gerar Certificados dos Elegíveis
+            </button>
+            <button id="test-btn" class="btn-secondary">
+                🧪 Testar com Aluno Fictício
             </button>
             <button id="restart-btn" class="btn-secondary">
                 🔄 Recomeçar
@@ -89,44 +91,68 @@
     </section>
 </div>
 
+<!-- ============================================================
+     MODAL DE PRÉ-VISUALIZAÇÃO
+     ============================================================ -->
+<div id="preview-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="preview-title">Pré-visualização</h3>
+            <button id="close-modal" class="btn-close-modal" aria-label="Fechar">✕</button>
+        </div>
+
+        <div class="modal-body">
+            <div id="preview-container"></div>
+        </div>
+
+        <div class="modal-footer">
+            <button id="preview-prev" class="btn-secondary" disabled>◀ Anterior</button>
+            <span id="preview-counter" class="preview-counter"></span>
+            <button id="preview-next" class="btn-secondary" disabled>Próximo ▶</button>
+            <button id="download-current" class="btn-primary">📥 Baixar Este Certificado</button>
+            <button id="close-modal-2" class="btn-secondary">Fechar</button>
+        </div>
+    </div>
+</div>
+
 <!-- Template do certificado (oculto) -->
 <div id="certificate-template" style="position:absolute; left:-9999px;">
     <div class="certificate" id="cert-render">
-        <img src="assets/logo-ccmpr.png" class="cert-logo" alt=""
-             onerror="this.style.display='none'">
-        <h2 class="cert-title">Certificado de Menção Honrosa</h2>
+        <div class="cert-logo-wrapper">
+            <img src="assets/logo-ccmpr.png" class="cert-logo" alt="CCMPR"
+                 onerror="this.style.display='none'">
+        </div>
+
+        <h1 class="cert-title">Certificado de Menção Honrosa</h1>
 
         <p class="cert-header">
-            A DIREÇÃO DO COLÉGIO ESTADUAL CÍVICO-MILITAR ANCHIETA
+            A DIREÇÃO DO COLÉGIO&nbsp; ESTADUAL CÍVICO-MILITAR ANCHIETA&nbsp;
             CONFERE A(O) ESTUDANTE DO
             <span id="cert-serie">7º ANO DO ENSINO FUNDAMENTAL</span>
             TURMA "<span id="cert-letra">C</span>"
         </p>
 
-        <h3 class="cert-name" id="cert-nome">NOME DO ALUNO</h3>
+        <h2 class="cert-name" id="cert-nome">NOME DO ALUNO</h2>
 
         <p class="cert-body">
             DIPLOMA DE MENÇÃO HONROSA POR TER ALCANÇADO DURANTE O
-            <span id="cert-trimestre">1º</span> TRIMESTRE DO ANO LETIVO DE
+            <span id="cert-trimestre">1°</span> TRIMESTRE DO ANO LETIVO DE
             <span id="cert-ano">2026</span>, AS NOTAS IGUAIS OU SUPERIORES A 8,0
             EM TODOS OS COMPONENTES CURRICULARES.
         </p>
 
-        <p class="cert-date" id="cert-data">
-            CRUZEIRO DO OESTE, 03 DE JULHO DE 2026
-        </p>
+        <p class="cert-date" id="cert-data">CRUZEIRO DO OESTE, 03 DE JULHO DE 2026</p>
 
-        <p class="cert-quote">
-            "Seu sucesso começa na hora que você decide não desistir."
-        </p>
+        <p class="cert-quote">"Seu sucesso começa na hora que você decide não desistir."</p>
+
         <p class="cert-congrats">Parabéns por essa conquista!</p>
 
         <div class="signatures">
-            <div>
+            <div class="signature-line">
                 <span>CAMILA C. GABELONI FELIPE</span>
                 <small>DIRETORA GERAL</small>
             </div>
-            <div>
+            <div class="signature-line">
                 <span>RICHARDSON RODRIGUES</span>
                 <small>COORDENADOR CÍVICO-MILITAR</small>
             </div>
@@ -134,7 +160,6 @@
     </div>
 </div>
 
-<!-- Scripts -->
 <script src="js/config.js"></script>
 <script src="js/pdf-parser.js"></script>
 <script src="js/certificate.js"></script>
