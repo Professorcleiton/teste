@@ -43,6 +43,53 @@ function normalizarDisciplina(texto) {
 }
 
 // ============================================================
+//  LIMPA NOMES DUPLICADOS
+// ============================================================
+function limparNome(nome) {
+    if (!nome) return nome;
+
+    const palavras = nome.split(' ');
+
+    // Detecta duplicação total: "A B C A B C" → "A B C"
+    for (let tam = Math.floor(palavras.length / 2); tam >= 2; tam--) {
+        if (palavras.length % tam !== 0) continue;
+        const numFatias = palavras.length / tam;
+        const primeiraFatia = palavras.slice(0, tam).join(' ');
+        let todasIguais = true;
+
+        for (let i = 1; i < numFatias; i++) {
+            const fatia = palavras.slice(i * tam, (i + 1) * tam).join(' ');
+            if (fatia !== primeiraFatia) {
+                todasIguais = false;
+                break;
+            }
+        }
+
+        if (todasIguais) {
+            return primeiraFatia;
+        }
+    }
+
+    // Remove repetição simples da última palavra
+    // Ex: "SANTOS ANA LAURA SANTOS" → "SANTOS ANA LAURA"
+    // Ex: "JOSEANE TEIXEIRA DOS SANTOS JOSEANE" → remove último JOSEANE
+
+    // Também detecta quando o nome contém uma sequência que se repete
+    // parcialmente no início (ex: "SANTOS ANA LAURA DE ALMEIDA SANTOS")
+    if (palavras.length > 3) {
+        const primeira = palavras[0];
+        const ultima = palavras[palavras.length - 1];
+
+        // Se a primeira palavra é igual à última, remove a última
+        if (primeira === ultima) {
+            return palavras.slice(0, -1).join(' ');
+        }
+    }
+
+    return nome;
+}
+
+// ============================================================
 //  EXTRAÇÃO POR COORDENADAS
 // ============================================================
 async function extrairLinhasEstruturadas(arquivo) {
@@ -194,7 +241,7 @@ function detectarTabelas(linhas) {
 }
 
 // ============================================================
-//  ENCONTRA A COLUNA PARA UMA NOTA (considerando página+Y+X)
+//  ENCONTRA A COLUNA PARA UMA NOTA
 // ============================================================
 function encontrarColuna(tabelas, nota) {
     const candidatas = tabelas.filter(t =>
@@ -224,7 +271,7 @@ function encontrarColuna(tabelas, nota) {
 }
 
 // ============================================================
-//  DETECÇÃO DE ALUNOS — versão final
+//  DETECÇÃO DE ALUNOS
 // ============================================================
 function extrairAlunosDasLinhas(linhas, trimestre) {
     const alunos = [];
@@ -243,7 +290,6 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
     if (tabelas.length === 0) return [];
 
-    // Filtra linhas relevantes — SEM break!
     const linhasRelevantes = [];
     for (const linha of linhas) {
         const txt = linha.textoLinha;
@@ -259,7 +305,6 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
     console.log(`📝 ${linhasRelevantes.length} linhas relevantes`);
 
-    // Agrupa em blocos por número de aluno
     const blocos = [];
     let blocoAtual = null;
 
@@ -295,7 +340,6 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
     console.log(`📦 ${blocos.length} blocos totais`);
 
-    // Agrupa blocos por número
     const blocosPorNumero = {};
     for (const bloco of blocos) {
         if (!blocosPorNumero[bloco.numero]) {
@@ -306,7 +350,6 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
     console.log(`👥 ${Object.keys(blocosPorNumero).length} alunos únicos\n`);
 
-    // Processa cada aluno
     for (const numeroStr of Object.keys(blocosPorNumero)) {
         const numero = parseInt(numeroStr);
         const blocosDoAluno = blocosPorNumero[numero];
@@ -318,7 +361,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
 
         const primeiroBloco = blocosDoAluno[0];
 
-        // Extrai nome
+        // Extrai nome — remove duplicatas
         const partesNome = [];
         for (let k = 0; k < todasAsLinhas.length; k++) {
             const linha = todasAsLinhas[k];
@@ -337,7 +380,8 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
             }
         }
 
-        const nomeCompleto = partesNome.join(' ').replace(/\s+/g, ' ').trim();
+        let nomeCompleto = partesNome.join(' ').replace(/\s+/g, ' ').trim();
+        nomeCompleto = limparNome(nomeCompleto);
         if (!nomeCompleto || nomeCompleto.length < 5) continue;
 
         // Mapeia notas
