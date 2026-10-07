@@ -7,7 +7,7 @@ const CONFIG = {
     cidade: "CRUZEIRO DO OESTE",
     anoLetivo: 2026,
 
-    // 📅 Datas de emissão
+    // 📅 Datas de emissão por trimestre
     datasTrimestres: {
         1: "03 DE JULHO DE 2026",
         2: "25 DE SETEMBRO DE 2026",
@@ -24,6 +24,6 @@ const CONFIG = {
         cargo: "COORDENADOR CÍVICO-MILITAR"
     },
 
-    // 📊 Regra
+    // 📊 Regra de elegibilidade
     notaMinima: 8.0
 };
