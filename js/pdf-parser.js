@@ -5,28 +5,23 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ============================================================
-//  DISCIPLINAS — nomes simplificados para chave interna
-//  Cada PDF tem 2 tabelas com disciplinas diferentes
+//  DISCIPLINAS
 // ============================================================
 const DISCIPLINAS_TABELA_1 = [
     'ARTE', 'CIENCIAS', 'EDDIG', 'EDFIS', 'ENSREL',
     'GEOGRAFIA', 'HISTORIA', 'INGLES', 'PORTUGUES'
 ];
-
 const DISCIPLINAS_TABELA_2 = [
     'MATEMATICA', 'CIDADANIA', 'EDFIN', 'LEITURA', 'ESPANHOL', 'RECAPREND'
 ];
-
 const TODAS_DISCIPLINAS = [...DISCIPLINAS_TABELA_1, ...DISCIPLINAS_TABELA_2];
 
 // ============================================================
-//  NORMALIZAÇÃO DE NOMES DE DISCIPLINAS
-//  Detecta pelo texto do cabeçalho qual é a disciplina
+//  NORMALIZAÇÃO DE DISCIPLINAS
 // ============================================================
 function normalizarDisciplina(texto) {
     const t = texto.toUpperCase().replace(/\s+/g, ' ').trim();
 
-    // Tabela 1
     if (/^ARTE/.test(t)) return 'ARTE';
     if (/^CIENCIAS/.test(t)) return 'CIENCIAS';
     if (/^ED\s*DIG/.test(t)) return 'EDDIG';
@@ -37,7 +32,6 @@ function normalizarDisciplina(texto) {
     if (/^LINGUA\s*INGLE/.test(t) || /^INGLES/.test(t)) return 'INGLES';
     if (/^LINGUA\s*PORTU/.test(t) || /^PORTUGUES/.test(t)) return 'PORTUGUES';
 
-    // Tabela 2
     if (/^MATEMATICA/.test(t)) return 'MATEMATICA';
     if (/^CIDADANIA/.test(t)) return 'CIDADANIA';
     if (/^EDUCACAO\s*FIN/.test(t) || /^ED\s*FIN/.test(t)) return 'EDFIN';
@@ -86,7 +80,7 @@ async function extrairLinhasEstruturadas(arquivo) {
             todasLinhas.push({
                 pagina: l.pagina,
                 y: l.y,
-                celulasComX: l.itens.map(it => ({ x: it.x, texto: it.texto })),
+                celulasComX: l.itens.map(it => ({ x: it.x, y: it.y, texto: it.texto })),
                 textoLinha: l.itens.map(it => it.texto).join(' | ')
             });
         });
@@ -96,64 +90,68 @@ async function extrairLinhasEstruturadas(arquivo) {
 }
 
 // ============================================================
-//  DETECTA AS COLUNAS DE CADA TABELA (por página + Y do cabeçalho)
-//  Retorna um array de "tabelas", cada uma com seu conjunto de colunas
+//  DETECTA TODAS AS TABELAS DO PDF
+//  Cada tabela tem: página, yTopo, yBase, colunas[]
 // ============================================================
-function detectarTodasAsTabelas(linhas) {
+function detectarTabelas(linhas) {
     const tabelas = [];
 
+    // Encontra todas as linhas de cabeçalho (com ≥3 disciplinas reconhecidas)
+    const cabecalhos = [];
     for (const linha of linhas) {
-        const textos = linha.celulasComX.map(c => c.texto);
-
-        // Procura linhas de cabeçalho de disciplinas
-        // Uma linha é cabeçalho se tem pelo menos 3 disciplinas reconhecidas
-        const disciplinasDetectadas = [];
+        const disciplinas = [];
         linha.celulasComX.forEach(c => {
             const disc = normalizarDisciplina(c.texto);
             if (disc) {
-                disciplinasDetectadas.push({ x: c.x, disciplina: disc, texto: c.texto });
+                disciplinas.push({ x: c.x, disciplina: disc, texto: c.texto });
             }
         });
+        if (disciplinas.length >= 3) {
+            cabecalhos.push({ linha, disciplinas });
+        }
+    }
 
-        if (disciplinasDetectadas.length < 3) continue;
+    console.log(`🔍 ${cabecalhos.length} cabeçalhos potenciais`);
 
-        // Encontra a linha T1 T2 T3 IMEDIATAMENTE ABAIXO desse cabeçalho
-        // (ela deve estar na mesma página e com Y menor)
-        let linhaT = null;
-        let menorDistanciaY = Infinity;
+    // Para cada cabeçalho, encontra a linha T1 T2 T3 abaixo dele
+    for (const cab of cabecalhos) {
+        const linhaCab = cab.linha;
+
+        // Acha a linha T1 T2 T3 mais próxima abaixo
+        let melhorLinhaT = null;
+        let menorDist = Infinity;
 
         for (const l of linhas) {
-            if (l.pagina !== linha.pagina) continue;
-            if (l.y >= linha.y) continue;  // precisa estar ABAIXO
+            if (l.pagina !== linhaCab.pagina) continue;
+            if (l.y >= linhaCab.y - 1) continue;  // precisa estar abaixo
 
             const celulasT = l.celulasComX.filter(c => /^T[123]$/.test(c.texto));
-            if (celulasT.length < disciplinasDetectadas.length * 2) continue;
+            if (celulasT.length < cab.disciplinas.length * 2) continue;
 
-            const dist = linha.y - l.y;
-            if (dist < 30 && dist < menorDistanciaY) {
-                menorDistanciaY = dist;
-                linhaT = l;
+            const dist = linhaCab.y - l.y;
+            if (dist < 40 && dist < menorDist) {
+                menorDist = dist;
+                melhorLinhaT = l;
             }
         }
 
-        if (!linhaT) {
-            console.warn(`⚠️ Cabeçalho detectado mas sem linha T1/T2/T3 correspondente`);
+        if (!melhorLinhaT) {
+            console.warn(`⚠️ Sem linha T abaixo do cabeçalho na página ${linhaCab.pagina}`);
             continue;
         }
 
-        // Constrói as colunas
-        const celulasT = linhaT.celulasComX.filter(c => /^T[123]$/.test(c.texto));
-
-        // Mapeia cada coluna T para a disciplina cujo X é mais próximo
+        // Constrói colunas
+        const celulasT = melhorLinhaT.celulasComX.filter(c => /^T[123]$/.test(c.texto));
         const colunas = [];
+
         celulasT.forEach(cT => {
             let melhorDisc = null;
-            let menorDist = 40;
+            let menorDistX = 50;
 
-            for (const d of disciplinasDetectadas) {
+            for (const d of cab.disciplinas) {
                 const dist = Math.abs(d.x - cT.x);
-                if (dist < menorDist) {
-                    menorDist = dist;
+                if (dist < menorDistX) {
+                    menorDistX = dist;
                     melhorDisc = d;
                 }
             }
@@ -162,13 +160,12 @@ function detectarTodasAsTabelas(linhas) {
                 colunas.push({
                     x: cT.x,
                     disciplina: melhorDisc.disciplina,
-                    trimestre: parseInt(cT.texto[1]),
-                    xDisciplina: melhorDisc.x
+                    trimestre: parseInt(cT.texto[1])
                 });
             }
         });
 
-        // Cria "bins" (faixas) entre colunas
+        // Cria bins (faixas)
         for (let i = 0; i < colunas.length; i++) {
             const atual = colunas[i];
             const anterior = colunas[i - 1];
@@ -178,47 +175,72 @@ function detectarTodasAsTabelas(linhas) {
             atual.xMax = proxima ? (atual.x + proxima.x) / 2 : atual.x + 12;
         }
 
+        // ============================================================
+        //  Calcula a FAIXA Y da tabela (onde ficam os alunos)
+        //  Começa na linha T e vai até a próxima linha de cabeçalho
+        //  OU até o fim da página.
+        // ============================================================
+        let yBase = 0;  // bottom (menor Y)
+
+        // Procura o próximo cabeçalho na mesma página
+        const proximoCabecalho = linhas
+            .filter(l => l.pagina === linhaCab.pagina && l.y < melhorLinhaT.y)
+            .sort((a, b) => b.y - a.y)[0];
+
+        if (proximoCabecalho) {
+            yBase = proximoCabecalho.y + 20;
+        } else {
+            // Vai até o fim da página
+            yBase = 20;
+        }
+
         tabelas.push({
-            pagina: linha.pagina,
-            yCabecalho: linha.y,
+            pagina: linhaCab.pagina,
+            yTopo: melhorLinhaT.y,
+            yBase,
             colunas,
-            disciplinas: disciplinasDetectadas.map(d => d.disciplina)
+            disciplinas: cab.disciplinas.map(d => d.disciplina)
         });
 
-        console.log(`📋 Tabela detectada na página ${linha.pagina}: ${disciplinasDetectadas.length} disciplinas`);
-        disciplinasDetectadas.forEach(d => console.log(`   X=${d.x.toFixed(0)} → ${d.disciplina} (${d.texto})`));
-        console.log(`   ${colunas.length} colunas T1/T2/T3`);
+        console.log(`📋 Tabela P${linhaCab.pagina} Y[${yBase.toFixed(0)}..${melhorLinhaT.y.toFixed(0)}]: ${cab.disciplinas.length} disciplinas, ${colunas.length} colunas`);
     }
 
     return tabelas;
 }
 
 // ============================================================
-//  ENCONTRA EM QUAL TABELA E COLUNA CAI UMA NOTA
+//  ENCONTRA A COLUNA CORRETA PARA UMA NOTA (considerando página+Y+X)
 // ============================================================
-function encontrarColunaPorX(tabelas, x, y) {
-    // Procura a tabela que contém essa faixa Y (na mesma página)
-    // Como não sabemos a página exata, testamos todas
-    for (const tabela of tabelas) {
-        for (const col of tabela.colunas) {
-            if (x >= col.xMin && x < col.xMax) {
-                return col;
-            }
+function encontrarColuna(tabelas, nota) {
+    // Filtra tabelas da mesma página cuja faixa Y contenha o Y da nota
+    const candidatas = tabelas.filter(t =>
+        t.pagina === nota.pagina &&
+        nota.y >= t.yBase &&
+        nota.y <= t.yTopo
+    );
+
+    if (candidatas.length === 0) return null;
+
+    // Prefere a tabela com yTopo mais próximo (a mais específica)
+    // Se houver apenas 1, usa direto.
+    let tabela = candidatas[0];
+    if (candidatas.length > 1) {
+        // Se a nota está em uma faixa que se sobrepõe, escolhe a mais "interna"
+        tabela = candidatas.reduce((melhor, t) => {
+            const distMelhor = Math.abs(nota.y - melhor.yTopo);
+            const distAtual = Math.abs(nota.y - t.yTopo);
+            return distAtual < distMelhor ? t : melhor;
+        });
+    }
+
+    // Procura a coluna pela faixa de X
+    for (const col of tabela.colunas) {
+        if (nota.x >= col.xMin && nota.x < col.xMax) {
+            return col;
         }
     }
-    // Fallback: coluna mais próxima em X (tolerância larga)
-    let melhor = null;
-    let menorDist = 30;
-    for (const tabela of tabelas) {
-        for (const col of tabela.colunas) {
-            const dist = Math.abs(col.x - x);
-            if (dist < menorDist) {
-                menorDist = dist;
-                melhor = col;
-            }
-        }
-    }
-    return melhor;
+
+    return null;
 }
 
 // ============================================================
@@ -236,20 +258,17 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
         }
     }
 
-    // Detectar todas as tabelas
-    const tabelas = detectarTodasAsTabelas(linhas);
+    const tabelas = detectarTabelas(linhas);
     console.log(`\n📚 TOTAL: ${tabelas.length} tabelas detectadas\n`);
 
-    if (tabelas.length === 0) {
-        console.error('❌ Nenhuma tabela detectada');
-        return [];
-    }
+    if (tabelas.length === 0) return [];
 
-    // Filtra linhas relevantes (remove cabeçalhos)
+    // Filtra linhas relevantes
     const linhasRelevantes = [];
     for (const linha of linhas) {
         const txt = linha.textoLinha;
-        if (/GOVERNO|SECRETARIA|CRUZEIRO|ANCHIETA|Curso:|RELATÓRIO|Sistema Escola|DATA:|^T[123]\s*\|/i.test(txt)) continue;
+        if (/GOVERNO|SECRETARIA|CRUZEIRO|ANCHIETA|Curso:|RELATÓRIO|Sistema Escola|DATA:/i.test(txt)) continue;
+        if (/^T[123]\s*\|/.test(txt)) continue;
         if (/^ARTE\s*\|.*CIENCIAS/i.test(txt)) continue;
         if (/^MATEMATICA\s*\|.*CIDADANIA/i.test(txt)) continue;
         if (/Total de registros abaixo/i.test(txt)) break;
@@ -290,14 +309,14 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
     }
     if (blocoAtual) blocos.push(blocoAtual);
 
-    console.log(`📦 ${blocos.length} blocos de alunos\n`);
+    console.log(`📦 ${blocos.length} blocos de alunos`);
 
     // Processa cada bloco
     for (const bloco of blocos) {
         const numero = bloco.numero;
         if (alunos.find(a => a.numero === numero)) continue;
 
-        // Extrai o nome completo (todas as partes em maiúsculas)
+        // Monta nome
         const partesNome = [];
         for (let k = 0; k < bloco.linhas.length; k++) {
             const linha = bloco.linhas[k];
@@ -308,7 +327,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
                 const c = textos[j].trim();
                 if (!c) continue;
                 if (/^[A-ZÀ-Ú][A-ZÀ-Ú\s\.]{2,}$/.test(c) && !/^\d/.test(c)) {
-                    if (normalizarDisciplina(c)) continue;  // pula nome de disciplina
+                    if (normalizarDisciplina(c)) continue;
                     if (/^(DISCIPLINAS|RELATÓRIO)/.test(c)) continue;
                     partesNome.push(c);
                 }
@@ -316,27 +335,31 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
             }
         }
 
-        let nomeCompleto = partesNome.join(' ').replace(/\s+/g, ' ').trim();
+        const nomeCompleto = partesNome.join(' ').replace(/\s+/g, ' ').trim();
         if (!nomeCompleto || nomeCompleto.length < 5) continue;
 
         // ============================================================
-        //  MAPEIA AS NOTAS DE TODAS AS TABELAS
+        //  MAPEIA AS NOTAS DE CADA LINHA USANDO PÁGINA + Y + X
         // ============================================================
         const notasPorChave = {};
 
         for (let k = 0; k < bloco.linhas.length; k++) {
             const linha = bloco.linhas[k];
-            const celulas = linha.celulasComX;
             const inicioIdx = (k === 0) ? bloco.idxNum + 1 : 0;
 
-            for (let j = inicioIdx; j < celulas.length; j++) {
-                const c = celulas[j];
+            for (let j = inicioIdx; j < linha.celulasComX.length; j++) {
+                const c = linha.celulasComX[j];
                 if (!/^\d{1,2}[.,]\d$/.test(c.texto)) continue;
 
                 const valor = parseFloat(c.texto.replace(',', '.'));
                 if (isNaN(valor) || valor < 0 || valor > 10) continue;
 
-                const col = encontrarColunaPorX(tabelas, c.x, c.y);
+                const col = encontrarColuna(tabelas, {
+                    pagina: linha.pagina,
+                    y: linha.y,
+                    x: c.x
+                });
+
                 if (col) {
                     const chave = `${col.disciplina}_T${col.trimestre}`;
                     if (notasPorChave[chave] === undefined) {
@@ -346,7 +369,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
             }
         }
 
-        // Pega notas do trimestre
+        // Notas do trimestre
         const notasT = [];
         const disciplinasPresentes = [];
         for (const disc of TODAS_DISCIPLINAS) {
@@ -362,13 +385,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
             continue;
         }
 
-        // ============================================================
-        //  REGRA CONSERVADORA:
-        //  - Elegível SÓ SE o aluno tem notas para TODAS as disciplinas
-        //    que ele possui em QUALQUER trimestre (evita certificar
-        //    por falta de dados)
-        //  - E TODAS essas notas ≥ 8.0
-        // ============================================================
+        // Regra conservadora
         const disciplinasComAlgumaNota = TODAS_DISCIPLINAS.filter(disc =>
             [1, 2, 3].some(t => notasPorChave[`${disc}_T${t}`] !== undefined)
         );
@@ -391,7 +408,7 @@ function extrairAlunosDasLinhas(linhas, trimestre) {
             media: notasT.reduce((a, b) => a + b, 0) / notasT.length,
             elegivel,
             motivoNaoElegivel: !temTodasNoTrimestre
-                ? 'Faltam notas em algumas disciplinas'
+                ? `Faltam notas em ${disciplinasComAlgumaNota.length - notasT.length} disciplina(s)`
                 : (!todasNotasOk ? 'Alguma nota < 8.0' : null)
         });
     }
