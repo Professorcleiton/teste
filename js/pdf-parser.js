@@ -113,17 +113,18 @@ function detectarTabelas(linhas) {
 
     console.log(`🔍 ${cabecalhos.length} cabeçalhos potenciais`);
 
-    // Para cada cabeçalho, encontra a linha T1 T2 T3 abaixo dele
-    for (const cab of cabecalhos) {
+    // Para cada cabeçalho, encontra a linha T1 T2 T3 abaixo
+    for (let idx = 0; idx < cabecalhos.length; idx++) {
+        const cab = cabecalhos[idx];
         const linhaCab = cab.linha;
 
-        // Acha a linha T1 T2 T3 mais próxima abaixo
+        // Acha a linha T1 T2 T3 mais próxima abaixo do cabeçalho
         let melhorLinhaT = null;
         let menorDist = Infinity;
 
         for (const l of linhas) {
             if (l.pagina !== linhaCab.pagina) continue;
-            if (l.y >= linhaCab.y - 1) continue;  // precisa estar abaixo
+            if (l.y >= linhaCab.y - 1) continue;
 
             const celulasT = l.celulasComX.filter(c => /^T[123]$/.test(c.texto));
             if (celulasT.length < cab.disciplinas.length * 2) continue;
@@ -135,10 +136,7 @@ function detectarTabelas(linhas) {
             }
         }
 
-        if (!melhorLinhaT) {
-            console.warn(`⚠️ Sem linha T abaixo do cabeçalho na página ${linhaCab.pagina}`);
-            continue;
-        }
+        if (!melhorLinhaT) continue;
 
         // Constrói colunas
         const celulasT = melhorLinhaT.celulasComX.filter(c => /^T[123]$/.test(c.texto));
@@ -165,44 +163,44 @@ function detectarTabelas(linhas) {
             }
         });
 
-        // Cria bins (faixas)
+        // Bins (faixas de X)
         for (let i = 0; i < colunas.length; i++) {
             const atual = colunas[i];
             const anterior = colunas[i - 1];
             const proxima = colunas[i + 1];
-
             atual.xMin = anterior ? (anterior.x + atual.x) / 2 : atual.x - 12;
             atual.xMax = proxima ? (atual.x + proxima.x) / 2 : atual.x + 12;
         }
 
         // ============================================================
-        //  Calcula a FAIXA Y da tabela (onde ficam os alunos)
-        //  Começa na linha T e vai até a próxima linha de cabeçalho
-        //  OU até o fim da página.
+        //  ✅ CÁLCULO CORRETO DO yBase
+        //  É o Y do PRÓXIMO CABEÇALHO de disciplina na MESMA PÁGINA
+        //  que esteja ABAIXO do atual. Se não houver, é 20 (fim da página).
         // ============================================================
-        let yBase = 0;  // bottom (menor Y)
+        let yBase = 20;  // padrão: fim da página
 
-        // Procura o próximo cabeçalho na mesma página
-        const proximoCabecalho = linhas
-            .filter(l => l.pagina === linhaCab.pagina && l.y < melhorLinhaT.y)
-            .sort((a, b) => b.y - a.y)[0];
+        // Procura o próximo cabeçalho na mesma página com Y menor
+        const proximoCab = cabecalhos
+            .filter(c =>
+                c.linha.pagina === linhaCab.pagina &&
+                c.linha.y < linhaCab.y - 5
+            )
+            .sort((a, b) => b.linha.y - a.linha.y)[0];  // o mais próximo abaixo
 
-        if (proximoCabecalho) {
-            yBase = proximoCabecalho.y + 20;
-        } else {
-            // Vai até o fim da página
-            yBase = 20;
+        if (proximoCab) {
+            // yBase é logo ACIMA do próximo cabeçalho
+            yBase = proximoCab.linha.y + 15;
         }
 
         tabelas.push({
             pagina: linhaCab.pagina,
             yTopo: melhorLinhaT.y,
-            yBase,
+            yBase: yBase,
             colunas,
             disciplinas: cab.disciplinas.map(d => d.disciplina)
         });
 
-        console.log(`📋 Tabela P${linhaCab.pagina} Y[${yBase.toFixed(0)}..${melhorLinhaT.y.toFixed(0)}]: ${cab.disciplinas.length} disciplinas, ${colunas.length} colunas`);
+        console.log(`📋 Tabela ${idx}: P${linhaCab.pagina} Y[${yBase.toFixed(0)}..${melhorLinhaT.y.toFixed(0)}] ${cab.disciplinas.length} disc, ${colunas.length} cols`);
     }
 
     return tabelas;
