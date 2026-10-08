@@ -442,6 +442,21 @@ td {
     filter: saturate(0.8);
 }
 
+/* ------------------------------------------------------------
+   BRASÃO DO GOVERNO — canto superior direito
+   ------------------------------------------------------------ */
+.cert-brasao-canto {
+    position: absolute;
+    top: 30px;
+    right: 40px;
+    height: 60px;
+    width: auto;
+    max-width: 130px;
+    object-fit: contain;
+    z-index: 4;
+    pointer-events: none;
+}
+
 /* MOLDURA dupla */
 .certificate::before {
     content: '';
