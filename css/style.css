@@ -628,7 +628,6 @@ td {
     margin-bottom: -5px;
     position: relative;
     z-index: 2;
-    mix-blend-mode: multiply;   /* Remove fundo branco do JPG */
 }
 
 /* Linha horizontal sob a assinatura */
@@ -650,7 +649,6 @@ td {
     text-transform: uppercase;
     font-family: 'Times New Roman', Georgia, serif;
     margin-top: 2px;
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.9);
 }
 
 /* Cargo */
@@ -662,7 +660,6 @@ td {
     font-family: 'Times New Roman', Georgia, serif;
     margin-top: 1px;
     font-weight: normal;
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.9);
 }
 
 /* CERTIFICADO no modal de preview */
