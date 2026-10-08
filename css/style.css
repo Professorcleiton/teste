@@ -405,7 +405,7 @@ td {
 }
 
 /* ============================================================
-   TEMPLATE DO CERTIFICADO — Com fundo, brasão e assinaturas
+   TEMPLATE DO CERTIFICADO
    ============================================================ */
 #certificate-template {
     position: absolute;
@@ -428,7 +428,7 @@ td {
     overflow: hidden;
 }
 
-/* BANDEIRA DE FUNDO */
+/* BANDEIRA de fundo (marca d'água) */
 .cert-bg {
     position: absolute;
     top: 0;
@@ -442,7 +442,7 @@ td {
     filter: saturate(0.8);
 }
 
-/* MOLDURA decorativa */
+/* MOLDURA dupla */
 .certificate::before {
     content: '';
     position: absolute;
@@ -481,7 +481,7 @@ td {
     box-sizing: border-box;
 }
 
-/* BRASÃO CCM-PR */
+/* BRASÃO CCM-PR no topo */
 .cert-logo-wrapper {
     display: flex;
     justify-content: center;
@@ -494,9 +494,8 @@ td {
 .cert-logo {
     height: 75px;
     width: auto;
-    max-width: 75px;
+    max-width: 90px;
     object-fit: contain;
-    border-radius: 50%;
 }
 
 /* TÍTULO principal */
@@ -509,7 +508,6 @@ td {
     letter-spacing: 0.5px;
     font-family: 'Times New Roman', Georgia, serif;
     width: 100%;
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.9);
 }
 
 .cert-title::after {
@@ -531,22 +529,19 @@ td {
     text-transform: uppercase;
     font-weight: normal;
     width: calc(100% - 40px);
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.9);
 }
 
-/* NOME DO ALUNO */
+/* NOME DO ALUNO — SEM sublinhado */
 .cert-name {
     font-size: 30px;
     font-weight: bold;
     color: #1B3A5C;
-    margin: 12px 0;
-    padding: 0 20px 6px;
+    margin: 20px 0;
+    padding: 0;
     letter-spacing: 1px;
     font-family: 'Times New Roman', Georgia, serif;
     text-transform: uppercase;
     display: inline-block;
-    border-bottom: 2px solid #6B8E23;
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.9);
 }
 
 /* CORPO */
@@ -559,7 +554,6 @@ td {
     text-transform: uppercase;
     font-weight: normal;
     width: calc(100% - 60px);
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.9);
 }
 
 /* CIDADE + DATA */
@@ -571,7 +565,6 @@ td {
     text-transform: uppercase;
     font-weight: normal;
     width: 100%;
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.9);
 }
 
 /* FRASE MOTIVACIONAL */
@@ -583,7 +576,6 @@ td {
     font-family: 'Times New Roman', Georgia, serif;
     font-weight: normal;
     width: 100%;
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.9);
 }
 
 /* PARABÉNS */
@@ -594,7 +586,6 @@ td {
     font-family: 'Times New Roman', Georgia, serif;
     font-weight: bold;
     width: 100%;
-    text-shadow: 1px 1px 0 rgba(255,255,255,0.9);
 }
 
 /* ASSINATURAS */
@@ -640,7 +631,7 @@ td {
     margin: 2px 0 6px;
 }
 
-/* Nome em negrito */
+/* Nome */
 .signature-line span {
     display: block;
     font-size: 11px;
@@ -663,6 +654,14 @@ td {
 }
 
 /* CERTIFICADO no modal de preview */
+#preview-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px 0;
+}
+
 #preview-container .certificate {
     width: 842px !important;
     min-width: 842px !important;
