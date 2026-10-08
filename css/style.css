@@ -426,7 +426,7 @@ td {
 }
 
 /* ============================================================
-   TEMPLATE DO CERTIFICADO — Modelo oficial CCM-PR
+   TEMPLATE DO CERTIFICADO — Com bandeira de fundo e brasão
    ============================================================ */
 #certificate-template {
     position: absolute;
@@ -439,114 +439,218 @@ td {
     min-width: 842px;
     height: 595px;
     min-height: 595px;
-    padding: 30px 60px;
+    padding: 0;
     background: #ffffff;
     text-align: center;
     font-family: 'Times New Roman', Georgia, serif;
     position: relative;
     box-sizing: border-box;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+/* ------------------------------------------------------------
+   BANDEIRA DE FUNDO (marca d'água suave)
+   ------------------------------------------------------------ */
+.cert-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.10;                /* Ajuste entre 0.05 e 0.20 conforme preferir */
+    pointer-events: none;
+    z-index: 0;
+    filter: saturate(0.8);        /* Dessatura levemente para não competir com o texto */
+}
+
+/* ------------------------------------------------------------
+   MOLDURA decorativa (azul + verde)
+   ------------------------------------------------------------ */
+.certificate::before {
+    content: '';
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    border: 3px solid #1B3A5C;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.certificate::after {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    right: 18px;
+    bottom: 18px;
+    border: 1px solid #6B8E23;
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* ------------------------------------------------------------
+   CONTEÚDO (fica acima do fundo e das molduras)
+   ------------------------------------------------------------ */
+.cert-content {
+    position: relative;
+    z-index: 3;
+    width: 100%;
+    height: 100%;
+    padding: 35px 60px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     align-items: center;
-    flex-shrink: 0;
+    box-sizing: border-box;
 }
 
+/* ------------------------------------------------------------
+   BRASÃO do Governo no topo
+   ------------------------------------------------------------ */
 .cert-logo-wrapper {
     display: flex;
     justify-content: center;
-    margin-bottom: 5px;
-    min-height: 70px;
     align-items: center;
+    margin-bottom: 5px;
+    min-height: 80px;
     width: 100%;
 }
 
 .cert-logo {
-    height: 70px;
+    height: 85px;
     width: auto;
+    max-width: 130px;
+    object-fit: contain;
 }
 
+/* ------------------------------------------------------------
+   TÍTULO principal
+   ------------------------------------------------------------ */
 .cert-title {
     font-size: 30px;
     font-weight: bold;
-    color: #000000;
-    margin: 5px 0 15px 0;
+    color: #1B3A5C;
+    margin: 5px 0 12px 0;
     padding: 0;
     letter-spacing: 0.5px;
     font-family: 'Times New Roman', Georgia, serif;
     width: 100%;
+    position: relative;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.8);   /* Ajuda a ler sobre a bandeira */
 }
 
+.cert-title::after {
+    content: '';
+    display: block;
+    width: 200px;
+    height: 2px;
+    background: #6B8E23;
+    margin: 8px auto 0;
+}
+
+/* ------------------------------------------------------------
+   CABEÇALHO
+   ------------------------------------------------------------ */
 .cert-header {
     font-size: 13px;
     line-height: 1.5;
+    color: #000000;
+    margin: 8px 20px;
+    font-family: 'Times New Roman', Georgia, serif;
+    text-transform: uppercase;
+    font-weight: normal;
+    width: calc(100% - 40px);
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
+}
+
+/* ------------------------------------------------------------
+   NOME DO ALUNO — destaque
+   ------------------------------------------------------------ */
+.cert-name {
+    font-size: 32px;
+    font-weight: bold;
+    color: #1B3A5C;
+    margin: 15px 0;
+    padding: 0 20px 8px;
+    letter-spacing: 1px;
+    font-family: 'Times New Roman', Georgia, serif;
+    text-transform: uppercase;
+    display: inline-block;
+    border-bottom: 2px solid #6B8E23;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
+}
+
+/* ------------------------------------------------------------
+   CORPO do diploma
+   ------------------------------------------------------------ */
+.cert-body {
+    font-size: 13px;
+    line-height: 1.6;
     color: #000000;
     margin: 10px 30px;
     font-family: 'Times New Roman', Georgia, serif;
     text-transform: uppercase;
     font-weight: normal;
     width: calc(100% - 60px);
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
 }
 
-.cert-name {
-    font-size: 32px;
-    font-weight: bold;
-    color: #000000;
-    margin: 20px 0;
-    padding: 0;
-    letter-spacing: 1px;
-    font-family: 'Times New Roman', Georgia, serif;
-    text-transform: uppercase;
-    width: 100%;
-}
-
-.cert-body {
-    font-size: 13px;
-    line-height: 1.6;
-    color: #000000;
-    margin: 15px 40px;
-    font-family: 'Times New Roman', Georgia, serif;
-    text-transform: uppercase;
-    font-weight: normal;
-    width: calc(100% - 80px);
-}
-
+/* ------------------------------------------------------------
+   CIDADE + DATA
+   ------------------------------------------------------------ */
 .cert-date {
     font-size: 14px;
     color: #000000;
-    margin: 25px 0 15px 0;
+    margin: 20px 0 10px 0;
     font-family: 'Times New Roman', Georgia, serif;
     text-transform: uppercase;
     font-weight: normal;
     width: 100%;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
 }
 
+/* ------------------------------------------------------------
+   FRASE MOTIVACIONAL
+   ------------------------------------------------------------ */
 .cert-quote {
     font-size: 13px;
     font-style: italic;
-    color: #000000;
-    margin: 10px 0 5px 0;
+    color: #1B3A5C;
+    margin: 8px 0 5px 0;
     font-family: 'Times New Roman', Georgia, serif;
     font-weight: normal;
     width: 100%;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
 }
 
+/* ------------------------------------------------------------
+   "Parabéns por essa conquista!"
+   ------------------------------------------------------------ */
 .cert-congrats {
     font-size: 13px;
-    color: #000000;
-    margin: 5px 0 25px 0;
+    color: #6B8E23;
+    margin: 5px 0 20px 0;
     font-family: 'Times New Roman', Georgia, serif;
     font-weight: bold;
     width: 100%;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
 }
 
+/* ------------------------------------------------------------
+   ASSINATURAS
+   ------------------------------------------------------------ */
 .signatures {
     display: flex;
     justify-content: space-around;
     align-items: flex-end;
     margin-top: auto;
     width: 100%;
-    padding: 0 40px;
+    padding: 0 30px;
+    box-sizing: border-box;
 }
 
 .signature-line {
@@ -558,10 +662,11 @@ td {
     display: block;
     font-size: 12px;
     font-weight: bold;
-    color: #000000;
+    color: #1B3A5C;
     text-transform: uppercase;
     font-family: 'Times New Roman', Georgia, serif;
     padding-top: 3px;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
 }
 
 .signature-line small {
@@ -571,4 +676,32 @@ td {
     text-transform: uppercase;
     font-family: 'Times New Roman', Georgia, serif;
     margin-top: 2px;
+    font-weight: normal;
+    text-shadow: 1px 1px 0 rgba(255,255,255,0.8);
+}
+
+/* ------------------------------------------------------------
+   CERTIFICADO no modal de preview
+   ------------------------------------------------------------ */
+#preview-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px 0;
+}
+
+#preview-container .certificate {
+    width: 842px !important;
+    min-width: 842px !important;
+    max-width: 842px !important;
+    height: 595px !important;
+    min-height: 595px !important;
+    max-height: 595px !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    border: 1px solid #ccc;
+    background: #fff;
+    transform-origin: top center;
 }
